@@ -79,6 +79,8 @@ public enum WhitegramPreferences {
     }
 
     private static func makeProfile(_ values: [String: Any], mirrors: [String: Any]) throws -> Profile {
+        guard JSONSerialization.isValidJSONObject(values),
+              PropertyListSerialization.propertyList(mirrors, isValidFor: .binary) else { throw profileError() }
         return Profile(values: try JSONSerialization.data(withJSONObject: values, options: [.sortedKeys]),
             mirrors: try PropertyListSerialization.data(fromPropertyList: mirrors, format: .binary, options: 0))
     }

@@ -46,7 +46,7 @@ final class WhitegramPluginServicesTests: XCTestCase {
             finished.fulfill()
         })
         wait(for: [invoked], timeout: 2)
-        queue.sync {
+        try queue.sync {
             XCTAssertFalse(try! hub.resolve(scope: account, owner: "consumer", token: token, response: ["ok": true, "value": 42]))
             XCTAssertFalse(try! hub.resolve(scope: other, owner: "provider", token: token, response: ["ok": true, "value": 42]))
             XCTAssertThrowsError(try hub.resolve(scope: account, owner: "provider", token: token, response: ["ok": 1, "value": 42]))

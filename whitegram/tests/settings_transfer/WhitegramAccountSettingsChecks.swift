@@ -59,9 +59,20 @@ struct WhitegramAccountSettingsChecks {
         let privateChat = try JSONSerialization.jsonObject(with: defaults.data(forKey: "WhiteGramChatSettings.v1")!) as? [String: Bool]
         precondition(privateChat == ["compactPinnedMessagesPanel": false])
         let scopedData = defaults.data(forKey: WhitegramPreferences.accountProfilesKey)!
-        precondition(!WhitegramPreferences.update(["ghostModeEnabled": true, "invalid": Date()]))
-        precondition(defaults.data(forKey: WhitegramPreferences.accountProfilesKey) == scopedData)
-        precondition(!WhitegramPreferences.bool("ghostModeEnabled"))
+        for invalid: Any in [Date(), Data([1, 2]), Double.infinity, ["nested": Date()]] {
+            precondition(!WhitegramPreferences.update(["ghostModeEnabled": true, "invalid": invalid]))
+            precondition(defaults.data(forKey: WhitegramPreferences.accountProfilesKey) == scopedData)
+            precondition(!WhitegramPreferences.bool("ghostModeEnabled"))
+        }
+        do {
+            try WhitegramPreferences.updateProfileForTransfer(scope: .account(a)) { _, _ in
+                (Void(), ["ghostModeEnabled": true], ["wg_invalidMirror": NSObject()], [])
+            }
+            preconditionFailure("Invalid mirror was accepted")
+        } catch {
+            precondition(defaults.data(forKey: WhitegramPreferences.accountProfilesKey) == scopedData)
+            precondition(!WhitegramPreferences.bool("ghostModeEnabled"))
+        }
         let exported = try WhitegramSettingsArchiveStore.exportSettings(scope: .account(a))
         precondition(exported.archive.values["ghostModeEnabled"] as? Bool == false)
         precondition(exported.archive.values["geminiApiKey"] == nil)
