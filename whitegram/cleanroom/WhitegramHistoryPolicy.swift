@@ -5,6 +5,7 @@ import CoreFoundation
 public struct WhitegramHistoryPolicy: Hashable {
     public let showDeleted: Bool
     public let showEdited: Bool
+    public let showEditedStrikethrough: Bool
     public let saveHistory: Bool
     public let saveDeletedBackup: Bool
     public let deletedOpacity: Double
@@ -27,6 +28,8 @@ public struct WhitegramHistoryPolicy: Hashable {
         }
         self.showDeleted = flag("showDeletedMessages")
         self.showEdited = flag("showEditedOriginalText")
+        // Beta 3.2 getter 0x21e720 defaults to true; this is a display-only switch.
+        self.showEditedStrikethrough = values["showEditedStrikethrough"] == nil ? true : flag("showEditedStrikethrough")
         self.saveHistory = flag("saveChatHistory")
         self.saveDeletedBackup = flag("saveDeletedMessagesToBackup")
         self.hideOwnDeleted = flag("hideMyDeletedMessages")

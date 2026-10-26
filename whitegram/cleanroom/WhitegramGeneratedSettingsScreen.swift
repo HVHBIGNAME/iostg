@@ -35,7 +35,12 @@ private final class WhitegramSettingsCoordinator {
         } else {
             changes = [key: value]
         }
-        if !WhitegramPreferences.update(changes) {
+        let saved: Bool
+        if ["separateProfileTab", "hideBottomTabBar", "videoBackgroundInProfile"].contains(key) {
+            do { try WhitegramNavigationSettings.update(changes, accountId: self.context.account.id.int64); saved = true }
+            catch { saved = false }
+        } else { saved = WhitegramPreferences.update(changes) }
+        if !saved {
             self.saveFailed()
         } else if key == "whitegramNotificationsEnabled", value {
             self.context.sharedContext.applicationBindings.registerForNotifications { _ in }
@@ -69,8 +74,40 @@ private final class WhitegramSettingsCoordinator {
             return
         }
         guard let screen = WhitegramPortCapabilities.screens[id] else { return }
+        if screen == "visualParticles" {
+            let russian = WhitegramLocalization.selectedLanguage() == "ru"
+            let key = id == "particleEffectPicker" ? "particleEffect" : "particleMode"
+            let labels = key == "particleEffect" ? (russian ? ["Выключено", "Снег", "Осенние листья"] : ["Off", "Snow", "Autumn leaves"]) : (russian ? ["Весь экран", "Фон чата"] : ["Entire screen", "Chat background"])
+            let alert = UIAlertController(title: russian ? "Частицы" : "Particles", message: nil, preferredStyle: .actionSheet)
+            for (index, label) in labels.enumerated() {
+                alert.addAction(UIAlertAction(title: label, style: .default) { [weak self] _ in
+                    if !WhitegramPreferences.set(index, for: key) { self?.saveFailed() }
+                })
+            }
+            alert.addAction(UIAlertAction(title: russian ? "Отмена" : "Cancel", style: .cancel))
+            alert.popoverPresentationController?.sourceView = self.controller?.view
+            alert.popoverPresentationController?.sourceRect = CGRect(x: self.controller?.view.bounds.midX ?? 0, y: self.controller?.view.bounds.midY ?? 0, width: 1, height: 1)
+            self.controller?.present(alert, animated: true)
+            return
+        }
         let target: ViewController
         switch screen {
+        case "visualParticles": return
+        case "navigationCover": target = WhitegramBackgroundController(context: self.context, kind: .cover)
+        case "navigationVideo": target = WhitegramBackgroundController(context: self.context, kind: .video)
+        case "navigationChatPreview": target = whitegramChatListPreviewController(context: self.context)
+        case "navigationTabPreview": target = WhitegramNavigationPreviewController(context: self.context)
+        case "navigationResetCover":
+            do { try WhitegramBackgroundStore.reset(.cover, accountId: self.context.account.id.int64) }
+            catch { self.saveFailed() }
+            return
+        case "navigationResetVideo":
+            do { try WhitegramBackgroundStore.reset(.video, accountId: self.context.account.id.int64) }
+            catch { self.saveFailed() }
+            return
+        case "remainingPresentation": target = whitegramRemainingPresentationController(context: self.context, id: id)
+        case "deviceSettings": target = whitegramDeviceSettingsController(context: self.context)
+        case "accountSettings": target = whitegramAccountSettingsController(context: self.context)
         case "diagnostics": target = whitegramDiagnosticsController(context: self.context)
         case "textFormatting": target = whitegramTextFormattingController(context: self.context)
         case "visualUsername": target = whitegramVisualUsernameController(context: self.context)
@@ -194,7 +231,7 @@ public func whitegramGeneratedSettingsController(context: AccountContext, sectio
         let russian = WhitegramLocalization.selectedLanguage(baseLanguage: presentationData.strings.baseLanguageCode) == "ru"
         let hideDescriptions = WhitegramPreferences.bool("hideSettingsDescriptions", default: UserDefaults.standard.bool(forKey: "wg_hideSettingsDescriptions"))
         let descriptors = WhitegramSettingsList.filtered(WhitegramSettingsLayout.rows(WhitegramSettingsCatalog.rows), sections: sections, query: coordinator.query,
-            availableOnly: availableOnly, hideDescriptions: hideDescriptions, informationIds: Set(WhitegramPortCapabilities.informationKeys.keys),
+            availableOnly: availableOnly, hideDescriptions: hideDescriptions, informationIds: Set(WhitegramPortCapabilities.informationKeys.keys).union(["iconPackSitePreview"]),
             supported: { WhitegramPortCapabilities.supports($0) || WhitegramSettingsNumber(rawValue: $0) != nil || $0 == "messagePreview" },
             title: { WhitegramPortCapabilities.title($0, baseLanguage: presentationData.strings.baseLanguageCode) })
         let rows = descriptors.map { descriptor -> WhitegramSettingsRow in

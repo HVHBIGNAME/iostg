@@ -141,4 +141,47 @@ final class WhitegramPluginStorageTests: XCTestCase {
         self.assertCode("INVALID_ARGUMENT") { _ = try whitegramPluginNumber(arguments, 0) }
         self.assertCode("INVALID_ARGUMENT") { _ = try whitegramPluginBool(arguments, 3) }
     }
+
+    func testCommonJSDirectoryMainAndInstalledNodeModules() throws {
+        let root = self.directory.appendingPathComponent("package")
+        let content = [
+            "lib/use.js": "module.exports=require('@scope/math');",
+            "node_modules/@scope/math/package.json": "{\"main\":\"./dist/api.cjs\"}",
+            "node_modules/@scope/math/dist/api.cjs": "module.exports={answer:42};",
+            "folder/index.cjs": "module.exports=require('../lib/use');",
+            "escape/package.json": "{\"main\":\"../main.js\"}",
+            "main.js": ""
+        ]
+        for (path, value) in content {
+            let url = root.appendingPathComponent(path)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(value.utf8).write(to: url)
+        }
+        let files = try WhitegramPluginFiles(root: self.directory)
+        let module = try files.resolveModule(directory: "lib", name: "@scope/math")
+        XCTAssertEqual(module["path"] as? String, "node_modules/@scope/math/dist/api.cjs")
+        XCTAssertEqual(module["kind"] as? String, "js")
+        XCTAssertEqual(try files.resolveModule(directory: "", name: "folder")["path"] as? String, "folder/index.cjs")
+        self.assertCode("INVALID_PATH") { _ = try files.resolveModule(directory: "", name: "escape") }
+    }
+
+    func testCommonJSAndJSONPluginImportsPreserveSourceWithoutExecution() throws {
+        let storage = try WhitegramPluginStorage(accountId: "test-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: storage.root) }
+        let source = "throw Error('import must not execute');"
+        let script = self.directory.appendingPathComponent("example.cjs")
+        try Data(source.utf8).write(to: script)
+        let record = try storage.install(from: script)
+        XCTAssertEqual(record.entry, "main.cjs")
+        let files = try WhitegramPluginFiles(root: storage.pluginRoot(record.id))
+        XCTAssertEqual(try files.packageFile(record.entry), Data(source.utf8))
+        let package = self.directory.appendingPathComponent("example.plugin")
+        try JSONSerialization.data(withJSONObject: ["name": "JSON plugin", "entry": "main.cjs", "files": ["main.cjs": source]]).write(to: package)
+        XCTAssertEqual(try storage.install(from: package).entry, "main.cjs")
+        if !WhitegramPluginTypeScript.isInstalled {
+            let ts = self.directory.appendingPathComponent("example.ts")
+            try Data("export const n: number = 1;".utf8).write(to: ts)
+            self.assertCode("UNSUPPORTED_LANGUAGE") { _ = try storage.install(from: ts) }
+        }
+    }
 }

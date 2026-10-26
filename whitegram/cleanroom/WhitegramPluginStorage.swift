@@ -191,15 +191,15 @@ final class WhitegramPluginStorage {
             permissions = (metadata["permissions"] as? [String]) ?? []
             entry = package.entry
             files = package.files
-        } else if url.pathExtension.lowercased() == "js" {
+        } else if ["js", "cjs", "ts", "tsx"].contains(url.pathExtension.lowercased()) {
             guard String(data: data, encoding: .utf8) != nil else { throw WhitegramPluginError("INVALID_PACKAGE", "JavaScript must be UTF-8") }
             name = url.deletingPathExtension().lastPathComponent
             version = "1.0"
-            entry = "main.js"
+            entry = "main." + url.pathExtension.lowercased()
             permissions = []
             files[entry] = data
         } else {
-            guard ["json", "wgplugin"].contains(url.pathExtension.lowercased()),
+            guard ["json", "plugin", "wgplugin"].contains(url.pathExtension.lowercased()),
                   let package = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let sourceFiles = package["files"] as? [String: Any],
                   let packageName = package["name"] as? String,
@@ -207,7 +207,7 @@ final class WhitegramPluginStorage {
                 throw WhitegramPluginError("INVALID_PACKAGE", "Import a .js file or a JSON package with name, entry and files")
             }
             if let runtime = package["runtime"] {
-                guard let runtime = runtime as? String, ["javascript", "js"].contains(runtime.lowercased()) else {
+                guard let runtime = runtime as? String, ["javascript", "js", "typescript", "ts"].contains(runtime.lowercased()) else {
                     throw WhitegramPluginError("UNSUPPORTED_LANGUAGE", "This build runs JavaScript plugins only")
                 }
             }
@@ -233,11 +233,13 @@ final class WhitegramPluginStorage {
             }
         }
         if let runtime = metadata["runtime"] {
-            guard let runtime = runtime as? String, ["javascript", "js"].contains(runtime.lowercased()) else {
+            guard let runtime = runtime as? String, ["javascript", "js", "typescript", "ts"].contains(runtime.lowercased()) else {
                 throw WhitegramPluginError("UNSUPPORTED_LANGUAGE", "This package requires a language runtime that is not installed")
             }
         }
-        guard entry.lowercased().hasSuffix(".js") else { throw WhitegramPluginError("UNSUPPORTED_LANGUAGE", "Entry \(entry) requires an unbundled compiler or language runtime") }
+        let extensionName = URL(fileURLWithPath: entry).pathExtension.lowercased()
+        let isTypeScript = ["ts", "tsx"].contains(extensionName)
+        guard ["js", "cjs"].contains(extensionName) || (isTypeScript && WhitegramPluginTypeScript.isInstalled) else { throw WhitegramPluginError("UNSUPPORTED_LANGUAGE", "Entry \(entry) requires an unbundled compiler or language runtime") }
         guard !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, name.utf8.count <= 512, version.utf8.count <= 128,
               let source = files[entry], String(data: source, encoding: .utf8) != nil else {
             throw WhitegramPluginError("INVALID_PACKAGE", "A nonempty name and UTF-8 JavaScript entry are required")
@@ -346,15 +348,53 @@ final class WhitegramPluginFiles {
     func resolveModule(directory: String, name: String) throws -> [String: Any] {
         let path = try WhitegramPluginPath.modulePath(directory: directory, name: name)
         let packageRoot = try self.directory("package")
-        for candidate in [path, path + ".js", path + ".json", path + "/index.js", path + "/index.json"] {
+        var visited = Set<String>()
+        func resolve(_ path: String) throws -> [String: Any]? {
+            guard visited.insert(path).inserted, visited.count <= 32 else { throw WhitegramPluginError("INVALID_PACKAGE", "Cyclic or excessively nested package main") }
+            for candidate in [path, path + ".js", path + ".cjs", path + ".json", path + ".ts", path + ".tsx"] {
+                let url = try WhitegramPluginPath.url(root: packageRoot, path: candidate)
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue else { continue }
+                return try module(candidate)
+            }
+            let manifestURL = try WhitegramPluginPath.url(root: packageRoot, path: path + "/package.json")
+            if FileManager.default.fileExists(atPath: manifestURL.path) {
+                guard let metadata = try JSONSerialization.jsonObject(with: WhitegramPluginStorage.readLimited(manifestURL)) as? [String: Any] else {
+                    throw WhitegramPluginError("INVALID_PACKAGE", "Module package.json must be an object")
+                }
+                if let main = metadata["main"] {
+                    guard let main = main as? String else { throw WhitegramPluginError("INVALID_PACKAGE", "Module main must be a path") }
+                    let target = try WhitegramPluginPath.modulePath(directory: path, name: main)
+                    guard target.hasPrefix(path + "/") else { throw WhitegramPluginError("INVALID_PATH", "Module main escapes its directory") }
+                    if let result = try resolve(target) { return result }
+                }
+            }
+            for candidate in [path + "/index.js", path + "/index.cjs", path + "/index.json", path + "/index.ts", path + "/index.tsx"] {
+                let url = try WhitegramPluginPath.url(root: packageRoot, path: candidate)
+                var isDirectory: ObjCBool = false
+                if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue { return try module(candidate) }
+            }
+            return nil
+        }
+        func module(_ candidate: String) throws -> [String: Any] {
             let url = try WhitegramPluginPath.url(root: packageRoot, path: candidate)
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue else { continue }
-            let kind = url.pathExtension.lowercased()
-            guard ["js", "json"].contains(kind) else { throw WhitegramPluginError("UNSUPPORTED_LANGUAGE", "require supports .js and .json modules only") }
+            let extensionName = url.pathExtension.lowercased()
+            let typeScript = ["ts", "tsx"].contains(extensionName)
+            guard ["js", "cjs", "json"].contains(extensionName) || (typeScript && WhitegramPluginTypeScript.isInstalled) else { throw WhitegramPluginError("UNSUPPORTED_LANGUAGE", "Module requires an unbundled compiler or language runtime") }
             guard let source = String(data: try WhitegramPluginStorage.readLimited(url), encoding: .utf8) else { throw WhitegramPluginError("INVALID_ENCODING", "Module is not UTF-8") }
             let directory = candidate.split(separator: "/").dropLast().joined(separator: "/")
-            return ["path": candidate, "dir": directory, "kind": kind, "source": source]
+            return ["path": candidate, "dir": directory, "kind": typeScript ? "typescript" : extensionName == "cjs" ? "js" : extensionName, "source": source]
+        }
+        if let result = try resolve(path) { return result }
+        if !name.hasPrefix(".") {
+            var components = directory.isEmpty ? [] : directory.split(separator: "/").map(String.init)
+            while true {
+                let prefix = components.isEmpty ? "" : components.joined(separator: "/") + "/"
+                let candidate = try WhitegramPluginPath.modulePath(directory: prefix + "node_modules", name: name)
+                if !visited.contains(candidate), let result = try resolve(candidate) { return result }
+                if components.isEmpty { break }
+                components.removeLast()
+            }
         }
         throw WhitegramPluginError("MODULE_NOT_FOUND", "Cannot resolve \(name) from \(directory)")
     }

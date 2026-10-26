@@ -24,7 +24,8 @@ public extension WhitegramHistoryStore {
             authorName: message.author.map { whitegramHistoryBoundedString(EnginePeer($0).debugDisplayTitle, maximumBytes: self.maximumNameBytes) },
             editedAt: message.editedTime, textTruncated: message.text.utf8.count > self.maximumTextBytes,
             media: message.media.prefix(self.maximumMediaItems).map(whitegramHistoryMedia),
-            threadId: message.threadId.map(String.init), groupingKey: message.groupingKey.map(String.init)
+            threadId: message.threadId.map(String.init), groupingKey: message.groupingKey.map(String.init),
+            entities: whitegramHistoryArchiveEntities(message)
         )
         self.forAccount(mediaBoxPath: mediaBoxPath, accountPeerId: accountPeerId).append(entry)
     }
@@ -33,6 +34,18 @@ public extension WhitegramHistoryStore {
         guard previous.count == updated.count else { return true }
         // Compare attachment content, not expiring resource references, poll votes or cached previews.
         return zip(previous, updated).contains { whitegramHistoryMedia($0.0) != whitegramHistoryMedia($0.1) }
+    }
+}
+
+private func whitegramHistoryArchiveEntities(_ message: Message) -> [WhitegramHistoryEntity]? {
+    guard let native = message.textEntitiesAttribute?.entities else { return nil }
+    do {
+        let text = whitegramHistoryBoundedString(message.text, maximumBytes: WhitegramHistoryStore.maximumTextBytes)
+        let encoded = try JSONEncoder().encode(Array(native.prefix(1024)))
+        return try JSONDecoder().decode([WhitegramHistoryEntity].self, from: encoded).filter { $0.isValid(in: text) }
+    } catch {
+        NSLog("Whitegram: history entity capture unavailable")
+        return nil
     }
 }
 

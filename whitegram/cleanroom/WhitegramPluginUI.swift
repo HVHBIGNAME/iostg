@@ -4,6 +4,59 @@ import AsyncDisplayKit
 import Display
 import TelegramPresentationData
 import AccountContext
+import WebKit
+
+private final class WhitegramPluginWebView: UIView, WKScriptMessageHandler, WKNavigationDelegate {
+    private let webView: WKWebView
+    private let network: Bool
+    private let message: (Any) -> Void
+
+    init(html: String, height: CGFloat, network: Bool, message: @escaping (Any) -> Void) {
+        let configuration = WKWebViewConfiguration()
+        configuration.websiteDataStore = .nonPersistent()
+        self.webView = WKWebView(frame: .zero, configuration: configuration)
+        self.network = network
+        self.message = message
+        super.init(frame: .zero)
+        // The handler is explicitly removed when its surface tree is replaced
+        // or closed; WebKit otherwise retains its message-handler owner.
+        configuration.userContentController.add(self, name: "wg")
+        self.webView.navigationDelegate = self
+        self.webView.translatesAutoresizingMaskIntoConstraints = false
+        self.addSubview(self.webView)
+        NSLayoutConstraint.activate([
+            self.webView.leadingAnchor.constraint(equalTo: self.leadingAnchor), self.webView.trailingAnchor.constraint(equalTo: self.trailingAnchor),
+            self.webView.topAnchor.constraint(equalTo: self.topAnchor), self.webView.bottomAnchor.constraint(equalTo: self.bottomAnchor),
+            self.heightAnchor.constraint(equalToConstant: height)
+        ])
+        let sources = network ? "https: http: data: blob:" : "data: blob:"
+        let policy = "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' \(network ? "https: http: blob:" : "blob:"); style-src 'unsafe-inline' \(network ? "https: http:" : ""); img-src \(sources); media-src \(sources); font-src \(sources); connect-src \(network ? "https: http: wss: ws:" : "'none'"); frame-src 'none'; form-action 'none'; base-uri 'none'"
+        self.webView.loadHTMLString("<meta http-equiv=\"Content-Security-Policy\" content=\"\(policy)\">" + html, baseURL: nil)
+    }
+
+    required init?(coder: NSCoder) { return nil }
+
+    func stop() {
+        self.webView.stopLoading()
+        self.webView.navigationDelegate = nil
+        self.webView.configuration.userContentController.removeScriptMessageHandler(forName: "wg")
+    }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard message.frameInfo.isMainFrame, let data = try? JSONSerialization.data(withJSONObject: message.body, options: [.fragmentsAllowed]),
+              data.count <= 65536, let value = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) else { return }
+        self.message(["value": value])
+    }
+
+    func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        guard navigationAction.targetFrame?.isMainFrame == true, let url = navigationAction.request.url else { decisionHandler(.cancel); return }
+        if url.absoluteString == "about:blank" { decisionHandler(.allow); return }
+        guard self.network, ["https", "http"].contains(url.scheme?.lowercased() ?? ""), url.user == nil, url.password == nil else {
+            decisionHandler(.cancel); return
+        }
+        decisionHandler(.allow)
+    }
+}
 
 private final class WhitegramPluginControlTarget: NSObject, UITextFieldDelegate, UITextViewDelegate {
     var changed: ((Any) -> Void)?
@@ -33,12 +86,21 @@ private final class WhitegramPluginTreeRenderer {
     private let presentationData: PresentationData
     private let dispatch: (String, Any) -> Void
     var targets: [WhitegramPluginControlTarget] = []
+    private var webViews: [WhitegramPluginWebView] = []
     private var count = 0
 
     init(presentationData: PresentationData, dispatch: @escaping (String, Any) -> Void) {
         self.presentationData = presentationData
         self.dispatch = dispatch
     }
+
+    func stop() {
+        for webView in self.webViews { webView.stop() }
+        self.webViews.removeAll()
+        self.targets.removeAll()
+    }
+
+    deinit { self.stop() }
 
     private func target(_ props: [String: Any]) -> WhitegramPluginControlTarget {
         let target = WhitegramPluginControlTarget()
@@ -104,7 +166,33 @@ private final class WhitegramPluginTreeRenderer {
         let children = (node["children"] as? [Any]) ?? []
         let view: UIView
         switch type {
-        case "vstack", "hstack", "list", "scroll", "section", "card", "glass", "blur", "zstack":
+        case "web":
+            guard let html = props["html"] as? String, html.utf8.count <= 1024 * 1024 else { throw WhitegramPluginError("INVALID_UI", "Web requires at most 1 MiB of HTML") }
+            let callback = props["onMessage"] as? String
+            let dispatch = self.dispatch
+            let webView = WhitegramPluginWebView(html: html, height: self.number(props, "height", 240, min: 44, max: 2048),
+                network: props["__webNetwork"] as? Bool == true, message: { payload in
+                    if let callback = callback, callback.hasPrefix("__cb:") { dispatch(String(callback.dropFirst(5)), payload) }
+                })
+            self.webViews.append(webView)
+            view = webView
+        case "zstack":
+            let container = UIView()
+            for child in children {
+                let childView = try self.render(child, depth: depth + 1)
+                childView.translatesAutoresizingMaskIntoConstraints = false
+                container.addSubview(childView)
+                NSLayoutConstraint.activate([
+                    childView.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+                    childView.centerYAnchor.constraint(equalTo: container.centerYAnchor),
+                    childView.leadingAnchor.constraint(greaterThanOrEqualTo: container.leadingAnchor),
+                    childView.trailingAnchor.constraint(lessThanOrEqualTo: container.trailingAnchor),
+                    childView.topAnchor.constraint(greaterThanOrEqualTo: container.topAnchor),
+                    childView.bottomAnchor.constraint(lessThanOrEqualTo: container.bottomAnchor)
+                ])
+            }
+            view = container
+        case "vstack", "hstack", "list", "scroll", "section", "card", "glass", "blur":
             let stack = UIStackView()
             stack.axis = type == "hstack" ? .horizontal : .vertical
             stack.spacing = self.number(props, "spacing", 10, max: 64)
@@ -113,7 +201,6 @@ private final class WhitegramPluginTreeRenderer {
             if type == "section", let header = props["header"] as? String { stack.addArrangedSubview(self.label(header, props: ["bold": true])) }
             for child in children { stack.addArrangedSubview(try self.render(child, depth: depth + 1)) }
             if type == "section", let footer = props["footer"] as? String { stack.addArrangedSubview(self.label(footer, props: ["secondary": true, "font": "footnote"])) }
-            if type == "zstack" { throw WhitegramPluginError("UNSUPPORTED_UI", "ZStack layering is not implemented") }
             if ["card", "glass", "blur"].contains(type) {
                 stack.isLayoutMarginsRelativeArrangement = true
                 let padding = self.number(props, "padding", 14, max: 64)
@@ -273,6 +360,7 @@ final class WhitegramPluginSurfaceController: ViewController {
     var removed: (() -> Void)?
     var closedByHost = false
     private var wasVisible = false
+    var isOverlay = false
 
     init(presentationData: PresentationData, title: String) {
         self.presentationData = presentationData
@@ -311,6 +399,7 @@ final class WhitegramPluginSurfaceController: ViewController {
         let focused = self.focused(in: self.content)?.accessibilityIdentifier
         for child in self.content.arrangedSubviews { self.content.removeArrangedSubview(child); child.removeFromSuperview() }
         self.content.addArrangedSubview(view)
+        self.renderer?.stop()
         self.renderer = renderer
         if let focused = focused { self.find(focused, in: view)?.becomeFirstResponder() }
     }
@@ -320,6 +409,8 @@ final class WhitegramPluginSurfaceController: ViewController {
         for child in view.subviews { if let result = self.focused(in: child) { return result } }
         return nil
     }
+
+    func stopContent() { self.renderer?.stop(); self.renderer = nil }
 
     private func find(_ id: String, in view: UIView) -> UIView? {
         if view.accessibilityIdentifier == id { return view }
@@ -335,6 +426,11 @@ final class WhitegramPluginSurfaceController: ViewController {
     }
 
     override func viewDidAppear(_ animated: Bool) { super.viewDidAppear(animated); self.wasVisible = true }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        if self.isOverlay { self.scrollView.frame = self.view.bounds }
+    }
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
@@ -470,14 +566,16 @@ final class WhitegramPluginUI {
         case "ui.createSurface":
             guard self.surfaces.count < 8, arguments.count == 3, let options = arguments[1] as? [String: Any] else { throw WhitegramPluginError("QUOTA_EXCEEDED", "Invalid surface arguments or more than eight surfaces") }
             let kind = try whitegramPluginString(arguments, 0)
-            guard ["window", "sheet", "screen"].contains(kind) else { throw WhitegramPluginError("UNSUPPORTED_UI", "Surface kind \(kind) is not implemented") }
+            guard ["window", "sheet", "screen", "overlay"].contains(kind) else { throw WhitegramPluginError("UNSUPPORTED_UI", "Surface kind \(kind) is not implemented") }
             _ = try self.navigationController()
             let controller = WhitegramPluginSurfaceController(presentationData: try self.presentationData(), title: (options["title"] as? String) ?? "Plugin")
+            controller.isOverlay = kind == "overlay"
             let id = UUID().uuidString
             try controller.update(tree: arguments[2], dispatch: { [weak self] callback, payload in self?.dispatch?(id, callback, payload) })
             controller.removed = { [weak self] in self?.close(id) }
             self.surfaces[id] = Surface(controller: controller, kind: kind, options: options, visible: false)
-            if kind != "screen" { try self.show(id, modal: true) }
+            do { if kind != "screen" { try self.show(id, modal: true) } }
+            catch { self.surfaces.removeValue(forKey: id); controller.removed = nil; controller.stopContent(); throw error }
             return id
         case "ui.toast":
             try self.toast(whitegramPluginString(arguments, 0), options: arguments.count > 1 ? ((arguments[1] as? [String: Any]) ?? [:]) : [:])
@@ -493,13 +591,15 @@ final class WhitegramPluginUI {
                 guard arguments.count == 2, let options = arguments[1] as? [String: Any] else { throw WhitegramPluginError("INVALID_UI", "Expected surface options") }
                 surface.options.merge(options, uniquingKeysWith: { _, new in new })
                 if let title = options["title"] as? String { surface.controller.title = title }
+                if surface.kind == "overlay", surface.visible { try self.layoutOverlay(surface, navigation: self.navigationController()) }
                 self.surfaces[id] = surface
             case "ui.pushScreen": try self.show(id, modal: arguments.count > 1 && arguments[1] as? Bool == true)
             case "ui.setSurfaceVisible":
                 if arguments.count > 1 && arguments[1] as? Bool == true { try self.show(id, modal: surface.kind != "screen") }
                 else {
                     surface.controller.closedByHost = true
-                    surface.controller.dismiss(animated: true)
+                    if surface.kind == "overlay" { self.detachOverlay(surface) }
+                    else { surface.controller.dismiss(animated: true) }
                     surface.visible = false
                     self.surfaces[id] = surface
                 }
@@ -515,6 +615,16 @@ final class WhitegramPluginUI {
         guard var surface = self.surfaces[id] else { throw WhitegramPluginError("SURFACE_NOT_FOUND", id) }
         if surface.visible { return }
         let navigation = try self.navigationController()
+        if surface.kind == "overlay" {
+            try self.layoutOverlay(surface, navigation: navigation)
+            surface.controller.closedByHost = false
+            navigation.addChild(surface.controller)
+            navigation.view.addSubview(surface.controller.view)
+            surface.controller.didMove(toParent: navigation)
+            surface.visible = true
+            self.surfaces[id] = surface
+            return
+        }
         surface.controller.closedByHost = false
         surface.controller.navigationPresentation = modal ? .modal : .default
         surface.visible = true
@@ -522,11 +632,40 @@ final class WhitegramPluginUI {
         navigation.pushViewController(surface.controller)
     }
 
+    private func layoutOverlay(_ surface: Surface, navigation: NavigationController) throws {
+        let bounds = navigation.view.bounds.inset(by: navigation.view.safeAreaInsets)
+        func dimension(_ key: String, fallback: CGFloat, maximum: CGFloat) throws -> CGFloat {
+            guard let value = surface.options[key] else { return min(fallback, maximum) }
+            let number = try whitegramPluginNumber([value], 0)
+            guard number >= 0, number <= 4096 else { throw WhitegramPluginError("INVALID_UI", "Invalid overlay \(key)") }
+            return min(CGFloat(number), maximum)
+        }
+        let width = try dimension("width", fallback: 320, maximum: max(1, bounds.width))
+        let height = try dimension("height", fallback: 240, maximum: max(1, bounds.height))
+        let x = try dimension("x", fallback: 16, maximum: max(0, bounds.width - width))
+        let y = try dimension("y", fallback: 16, maximum: max(0, bounds.height - height))
+        surface.controller.view.frame = CGRect(x: bounds.minX + x, y: bounds.minY + y, width: width, height: height)
+        surface.controller.view.autoresizingMask = [.flexibleRightMargin, .flexibleBottomMargin]
+        surface.controller.view.layer.cornerRadius = 12
+        surface.controller.view.clipsToBounds = true
+        surface.controller.view.setNeedsLayout()
+    }
+
+    private func detachOverlay(_ surface: Surface) {
+        surface.controller.willMove(toParent: nil)
+        surface.controller.view.removeFromSuperview()
+        surface.controller.removeFromParent()
+    }
+
     private func close(_ id: String) {
         guard let surface = self.surfaces.removeValue(forKey: id) else { return }
         surface.controller.closedByHost = true
         surface.controller.removed = nil
-        if surface.visible { surface.controller.dismiss(animated: true) }
+        surface.controller.stopContent()
+        if surface.visible {
+            if surface.kind == "overlay" { self.detachOverlay(surface) }
+            else { surface.controller.dismiss(animated: true) }
+        }
         self.dispatch?(id, "__closed", NSNull())
     }
 

@@ -201,7 +201,9 @@ def _lens_runtime(patches):
 def patch_glass_runtime(patches):
     feature = "glass-material-replacement"
     anchor = "    public private(set) var params: Params?\n"
-    replace(patches, feature, GLASS, anchor, BACKGROUND_MEMBERS + anchor)
+    patches.replace(feature, GLASS, anchor, BACKGROUND_MEMBERS + anchor, accepted_after=(
+        BACKGROUND_MEMBERS.replace("[WhitegramGlassSettings.updatedNotification", "[WhitegramClassicStyle.changedNotification, WhitegramGlassSettings.updatedNotification") + anchor,
+    ))
     anchor = "        self.addSubview(self.contentContainer)\n"
     replace(patches, feature, GLASS, anchor, anchor + "        self.observeWhitegramGlass()\n")
     anchor = "    @objc private func onHighlightGesture(_ recognizer: GlassHighlightGestureRecognizer) {\n"
@@ -212,7 +214,8 @@ def patch_glass_runtime(patches):
 """ + anchor)
     _lens_runtime(patches)
     anchor = "    func update(size: CGSize, shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool = false, isVisible: Bool = true, transition: ComponentTransition) {\n"
-    replace(patches, feature, GLASS, anchor, anchor + BACKGROUND_UPDATE)
+    classic_update = BACKGROUND_UPDATE.replace("        let whitegramVisible = isVisible\n", "        if WhitegramClassicStyle.enabled { replacement = UIAccessibility.isReduceTransparencyEnabled ? .color : .blur }\n        let whitegramVisible = isVisible\n")
+    patches.replace(feature, GLASS, anchor, anchor + BACKGROUND_UPDATE, accepted_after=(anchor + classic_update,))
 
     anchor = "public final class GlassBackgroundContainerView: UIView {\n"
     replace(patches, feature, GLASS, anchor, anchor + CONTAINER_MEMBERS)

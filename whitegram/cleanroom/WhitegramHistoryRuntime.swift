@@ -15,6 +15,9 @@ public enum WhitegramHistoryRuntime {
         for key in ["perChatHideDeleted", "perChatHideEdited", "trackedPeerIds", "untrackedPeerIds"] where values[key] == nil {
             if let value = UserDefaults.standard.string(forKey: "wg_" + key) { values[key] = value }
         }
+        if values["showEditedStrikethrough"] == nil {
+            values["showEditedStrikethrough"] = UserDefaults.standard.object(forKey: "wg_showEditedStrikethrough")
+        }
         return WhitegramHistoryPolicy(values: values)
     }
 
@@ -154,7 +157,7 @@ public enum WhitegramHistoryRuntime {
 
     public static func originalForDisplay(_ message: Message, accountPeerId: PeerId) -> WhitegramHistoryEdit? {
         let policy = self.policy
-        guard policy.showEdited, policy.allows(.edited, peerId: message.id.peerId.toInt64(), own: self.own(message, accountPeerId: accountPeerId), bot: self.bot(message)),
+        guard policy.showEdited, policy.showEditedStrikethrough, policy.allows(.edited, peerId: message.id.peerId.toInt64(), own: self.own(message, accountPeerId: accountPeerId), bot: self.bot(message)),
               let edit = message.whitegramHistoryAttribute?.edits.first, !edit.text.isEmpty,
               edit.text != message.text || edit.entities != (message.textEntitiesAttribute?.entities ?? []) else { return nil }
         return edit

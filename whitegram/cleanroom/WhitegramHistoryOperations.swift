@@ -113,7 +113,18 @@ public enum WhitegramHistoryOperations {
             let disposable = postbox.transaction { transaction -> Result<WhitegramHistoryOperationResult, Error> in
                 return Result {
                     try self.verify(transaction: transaction, accountPeerId: accountPeerId)
-                    guard records.allSatisfy({ $0.accountId == String(accountPeerId.toInt64()) && whitegramHistoryValidPeer($0.peerId) && $0.namespace == Namespaces.Message.Cloud && $0.messageId > 0 && ($0.authorId.map(whitegramHistoryValidPeer) ?? true) }) else { throw WhitegramHistoryNativeError.invalidBackup }
+                    guard records.allSatisfy({ entry in
+                        entry.accountId == String(accountPeerId.toInt64()) && whitegramHistoryValidPeer(entry.peerId)
+                            && entry.namespace == Namespaces.Message.Cloud && entry.messageId > 0 && entry.messageDate >= 0
+                            && (entry.authorId.map(whitegramHistoryValidPeer) ?? true)
+                            && (entry.entities.map { entities in entities.count <= 1024 && entities.allSatisfy { $0.isValid(in: entry.text) } } ?? true)
+                    }) else { throw WhitegramHistoryNativeError.invalidBackup }
+                    var restoredEntities: [String: [MessageTextEntity]] = [:]
+                    for entry in records {
+                        if let entities = entry.entities, !entities.isEmpty {
+                            restoredEntities[entry.key] = try JSONDecoder().decode([MessageTextEntity].self, from: JSONEncoder().encode(entities))
+                        }
+                    }
                     let peers = try self.peerIds(transaction: transaction, scope: scope, records: records)
                     let savedIds = Set(records.filter { $0.event == .received }.map(\.messageIdentity))
                     var result = WhitegramHistoryOperationResult()
@@ -173,10 +184,14 @@ public enum WhitegramHistoryOperations {
                                 continue
                             }
                             let flags: StoreMessageFlags = entry.outgoing ? [] : [.Incoming]
+                            var attributes: [MessageAttribute] = [WhitegramHistoryMessageAttribute(isLocallyRestored: true)]
+                            if let native = restoredEntities[entry.key] {
+                                attributes.append(TextEntitiesMessageAttribute(entities: native))
+                            }
                             let restored = StoreMessage(id: id, customStableId: nil, globallyUniqueId: nil, groupingKey: nil,
                                 threadId: entry.threadId.flatMap(Int64.init), timestamp: entry.messageDate, flags: flags,
                                 tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: entry.authorId.flatMap(Int64.init).map(PeerId.init),
-                                text: entry.text, attributes: [WhitegramHistoryMessageAttribute(isLocallyRestored: true)], media: [])
+                                text: entry.text, attributes: attributes, media: [])
                             let _ = transaction.addMessages([restored], location: .Random)
                             WhitegramHistoryRuntime.rememberPeer(peerId, transaction: transaction)
                             result.createdTextCopies += 1

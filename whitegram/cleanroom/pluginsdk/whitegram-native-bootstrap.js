@@ -20,6 +20,7 @@
   var settingsPages = Object.create(null), settingsRows = Object.create(null), settingsSurfaces = Object.create(null);
   var interceptors = Object.create(null);
   var menuItems = Object.create(null);
+  var serviceHandlers = Object.create(null), serviceNames = Object.create(null);
   var stringify = JSON.stringify.bind(JSON), parse = JSON.parse.bind(JSON);
 
   function fault(code, message) {
@@ -328,11 +329,20 @@
   wg.__net = unsupportedObject("net", {
     httpTiming: function (url, callback) { return resultCallback(async("http.request", [{ url: url, method: "HEAD" }]), callback); }
   });
-  wg.__lang = {
-    isInstalled: function () { return false; }, installed: function () { return []; },
+    wg.__lang = {
+      isInstalled: function (name) { return (info.languages || []).indexOf(name) !== -1; }, installed: function () { return (info.languages || []).slice(); },
     request: function (language, operation, payload, callback) { callback({ ok: false, error: "UNSUPPORTED_LANGUAGE: " + language + " is not bundled" }); },
-    transpileTypeScript: function () { return { ok: false, error: "UNSUPPORTED_LANGUAGE: TypeScript compiler is not bundled" }; },
-    promptInstall: function () { throw fault("UNSUPPORTED_LANGUAGE", "External language runtimes cannot be installed by this build"); }
+      transpileTypeScript: function (source, filename) {
+        try {
+          if ((info.languages || []).indexOf("typescript") === -1) throw fault("UNSUPPORTED_LANGUAGE", "TypeScript compiler is not bundled");
+          return { ok: true, result: sync("language.transpileTypeScript", [String(source), String(filename || "module.ts")]) };
+        }
+        catch (error) { return { ok: false, error: (error.code || "COMPILER_ERROR") + ": " + String(error.message || error) }; }
+      },
+      promptInstall: function (names, callback) {
+        if (names.every(function (name) { return (info.languages || []).indexOf(name) !== -1; })) callback(true);
+        else throw fault("UNSUPPORTED_LANGUAGE", "Requested language runtimes are not bundled");
+      }
   };
 
   var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -535,7 +545,7 @@
         return surfaceHandle(original(surfaceOptions(options)));
       };
     }
-    ["window", "panel", "sheet", "screen"].forEach(function (name) { wg.ui[name] = wrapSurface(wg.ui[name]); });
+    ["window", "panel", "sheet", "screen", "overlay"].forEach(function (name) { wg.ui[name] = wrapSurface(wg.ui[name]); });
     ["push", "present"].forEach(function (name) { wg.screens[name] = wrapSurface(wg.screens[name]); });
     wg.sleep = function (ms) {
       return new Promise(function (resolve, reject) {
@@ -640,7 +650,76 @@
     wg.client.invoke = wg.invoke;
     wg.tg.invoke = function () { return Promise.reject(fault("UNSUPPORTED_API", "Raw MTProto invocation is not implemented")); };
     wg.tg.call = wg.tg.invoke;
-    wg.services = unsupportedObject("services");
+    function serviceWire(value, inbound, ancestors) {
+      if (value === undefined) return null;
+      if (!value || typeof value !== "object") return value;
+      if (inbound && typeof value.__wgBase64 === "string") return decodeBytes(value.__wgBase64);
+      if (!inbound && (value instanceof ArrayBuffer || ArrayBuffer.isView(value))) {
+        var bytes = value instanceof ArrayBuffer ? new Uint8Array(value) : new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
+        if (bytes.byteLength > 2 * 1024 * 1024) throw fault("QUOTA_EXCEEDED", "Service bytes exceed 2 MiB");
+        return { __wgBase64: encodeBytes(bytes) };
+      }
+      ancestors = ancestors || [];
+      if (ancestors.length >= 32 || ancestors.indexOf(value) !== -1) throw fault("INVALID_ARGUMENT", "Cyclic or excessively nested service payload");
+      var parents = ancestors.concat([value]);
+      if (Array.isArray(value)) return value.map(function (item) { return serviceWire(item, inbound, parents); });
+      var out = Object.create(null);
+      Object.keys(value).forEach(function (key) { out[key] = serviceWire(value[key], inbound, parents); });
+      return out;
+    }
+    wg.services = {
+      provide: function (name, api, options) {
+        assertActive(); name = String(name); options = options || {};
+        if (!api || typeof api !== "object" || Array.isArray(api)) throw fault("INVALID_ARGUMENT", "Service API must be a method dictionary");
+        if (!serviceNames[name] && Object.keys(serviceNames).length >= 32) throw fault("QUOTA_EXCEEDED", "Too many provided services");
+        var id = "svc" + (++sequence);
+        sync("services.provide", [name, String(options.version || "1.0"), id]);
+        if (serviceNames[name]) delete serviceHandlers[serviceNames[name]];
+        serviceNames[name] = id; serviceHandlers[id] = api;
+        return id;
+      },
+      unprovide: function (name) {
+        name = String(name);
+        sync("services.unprovide", [name]);
+        delete serviceHandlers[serviceNames[name]]; delete serviceNames[name];
+      },
+      list: function () { return sync("services.list"); },
+      call: function (name, method, args) {
+        return Promise.resolve().then(function () {
+          if (args !== undefined && !Array.isArray(args)) throw fault("INVALID_ARGUMENT", "Service arguments must be an array");
+          return async("services.call", [String(name), String(method), serviceWire(args || [], false)]);
+        }).then(function (value) { return serviceWire(value, true); });
+      },
+      consume: function (name) {
+        assertActive(); name = String(name);
+        return new Proxy(Object.create(null), { get: function (_, method) {
+          if (typeof method !== "string" || method === "then" || method === "toJSON") return undefined;
+          return function () { return wg.services.call(name, method, Array.prototype.slice.call(arguments)); };
+        } });
+      }
+    };
+    global.__wgNativeServiceCall = function (id, method, args, token, consumer) {
+      if (stopped || stopping) return;
+      function respond(response) {
+        if (stopped || stopping) return;
+        try { sync("services.resolve", [token, response]); }
+        catch (error) {
+          if (response.ok) respond({ ok: false, error: errorValue(error) });
+          else log("error", "Service completion: " + error);
+        }
+      }
+      try {
+        var api = serviceHandlers[id];
+        if (!api || !Object.prototype.hasOwnProperty.call(api, method) || ["constructor", "prototype", "__proto__"].indexOf(method) !== -1 || typeof api[method] !== "function") {
+          throw fault("SERVICE_METHOD_NOT_FOUND", "No service method " + method);
+        }
+        var value = api[method].apply(api, serviceWire(args, true).concat([{ consumer: consumer }]));
+        Promise.resolve(value).then(function (result) {
+          try { respond({ ok: true, value: serviceWire(result, false) }); }
+          catch (error) { respond({ ok: false, error: errorValue(error) }); }
+        }, function (error) { respond({ ok: false, error: errorValue(error) }); });
+      } catch (error) { respond({ ok: false, error: errorValue(error) }); }
+    };
     wg.jobs = unsupportedObject("jobs");
     wg.intercept = function (name, handler, options) {
       assertActive(); name = String(name);
@@ -661,8 +740,19 @@
     wg.ui.unprovide = unsupported("ui.unprovide");
     wg.tabs.add = unsupported("tabs.add");
     wg.tabs.remove = unsupported("tabs.remove");
-    wg.ui.overlay = unsupported("ui.overlay");
-    wg.wasm = { available: false, load: function () { return Promise.reject(fault("UNSUPPORTED_LANGUAGE", "WebAssembly execution is not enabled in this build")); } };
+    var wasm = global.WebAssembly;
+    wg.wasm = {
+      available: !!(wasm && typeof wasm.instantiate === "function"),
+      load: function (path, imports) {
+        return Promise.resolve().then(function () {
+          assertActive();
+          if (!wg.wasm.available) throw fault("UNSUPPORTED_LANGUAGE", "WebAssembly is unavailable in this JavaScriptCore host");
+          var base64 = native.readPackageFile(String(path), true);
+          if (base64 === null) throw fault("FILE_NOT_FOUND", String(path));
+          return wasm.instantiate(decodeBytes(base64), imports || {});
+        }).then(function (result) { assertActive(); return result.instance; });
+      }
+    };
     ["addButton", "addLabel", "removeButton", "removeView", "clearButtons", "clearViews", "addHeaderButton", "addMenuButton", "removeHeaderButton"].forEach(function (name) { wg.chat[name] = unsupported("chat." + name); });
     wg.addMenuItem = function (config) {
       assertPermission("uiMutation", "addMenuItem"); assertPermission("messages", "addMenuItem");
@@ -920,8 +1010,9 @@
     var localCapabilities = [
       "BasePlugin", "registerPlugin", "log", "logLevel", "promisify", "on", "off", "hook",
       "intercept", "removeIntercept", "onSendMessage", "onRequest", "onResponse",
+      "services.provide", "services.unprovide", "services.list", "services.call", "services.consume",
       "addMenuItem", "menu.addItem", "menu.addMessageItem",
-      "ui.window", "ui.panel", "ui.sheet", "ui.screen", "ui.prompt", "ui.menu", "ui.toast", "ui.h", "ui.el",
+      "ui.window", "ui.panel", "ui.sheet", "ui.screen", "ui.overlay", "ui.prompt", "ui.menu", "ui.toast", "ui.h", "ui.el",
       "ui.surfaces", "ui.closeAll", "ui.showToastWithAction", "toast", "screens.push", "screens.present",
       "state", "createStore", "events.on", "events.once", "events.off", "events.emit", "events.sticky", "events.stream",
       "chat.watchMessages", "files.read", "files.readBase64", "files.list", "bytes.from", "bytes.toString",
@@ -933,11 +1024,13 @@
       "forwardMessage", "pinMessage", "reactToMessage", "markChatAsRead", "openChat", "request", "fetch", "fetchJSON", "fetchPost", "fetchPostJSON", "httpGet", "httpPost", "net.httpTiming",
       "client.sendMessage", "client.sendFile", "client.sendDice", "client.sendLocation", "client.sendContact", "client.editMessage", "client.getMessages", "client.getPeer"
     ];
-    ["VStack", "HStack", "Card", "Glass", "Blur", "Section", "Scroll", "List", "Text", "Button", "Row", "Toggle", "Slider", "Stepper", "TextField", "TextArea", "Segmented", "Progress", "Spinner", "Spacer", "Divider", "Icon", "Image"].forEach(function (name) {
+    ["VStack", "HStack", "ZStack", "Card", "Glass", "Blur", "Section", "Scroll", "List", "Text", "Button", "Row", "Toggle", "Slider", "Stepper", "TextField", "TextArea", "Segmented", "Progress", "Spinner", "Spacer", "Divider", "Icon", "Image", "Web"].forEach(function (name) {
       localCapabilities.push("ui." + name, "ui.el." + name);
     });
     wg.capabilities.has = function (path) {
       if (!path) return true;
+      if (path === "wasm" || path === "wasm.load") return wg.wasm.available;
+      if (path === "lang.typescript" || path === "lang.typescript.transpile" || path === "lang.ts" || path === "lang.ts.transpile") return (info.languages || []).indexOf("typescript") !== -1;
       if (supported[path] && supported[path].exposed) return true;
       if (localCapabilities.some(function (key) { return key === path || key.indexOf(path + ".") === 0; })) return true;
       return Object.keys(supported).some(function (key) { return supported[key].exposed && key.indexOf(path + ".") === 0; });
@@ -967,8 +1060,9 @@
         modules[resolved.path] = module;
         try {
           if (resolved.kind === "json") module.exports = parse(resolved.source);
-          else if (resolved.kind === "js") {
-            new Function("module", "exports", "require", "__filename", "__dirname", "wg", resolved.source + "\n//# sourceURL=whitegram-plugin/" + encodeURI(resolved.path))
+          else if (resolved.kind === "js" || resolved.kind === "typescript") {
+            var source = resolved.kind === "typescript" ? sync("language.transpileTypeScript", [resolved.source, resolved.path]) : resolved.source;
+            new Function("module", "exports", "require", "__filename", "__dirname", "wg", source + "\n//# sourceURL=whitegram-plugin/" + encodeURI(resolved.path))
               .call(module.exports, module, module.exports, makeRequire(resolved.dir), resolved.path, resolved.dir, global.wg);
           } else throw fault("UNSUPPORTED_LANGUAGE", "Only JavaScript and JSON modules can be required");
           module.loaded = true;
@@ -988,7 +1082,7 @@
     });
     wg.events.emit = scopedBytes(wg.events.emit);
     wg.events.sticky = scopedBytes(wg.events.sticky);
-    ["tg", "net", "files", "fs", "preferences", "clipboard", "ui", "chat", "settings", "menu"].forEach(function (key) {
+    ["tg", "net", "files", "fs", "preferences", "clipboard", "ui", "chat", "settings", "menu", "services"].forEach(function (key) {
       wg[key] = unsupportedObject(key, wg[key]);
     });
     global.wg = unsupportedObject("", wg);
@@ -1000,6 +1094,7 @@
     finishedEntry = true;
     global.module.loaded = true;
     var plugin = global.module.exports;
+    if (plugin && plugin.__esModule === true && Object.prototype.hasOwnProperty.call(plugin, "default")) plugin = plugin.default;
     if (typeof plugin === "function") plugin = new plugin();
     var exportedHooks = ["onLoad", "onUnload"].concat(lifecycleEvents);
     if (plugin && exportedHooks.some(function (name) { return typeof plugin[name] === "function"; })) wg.registerPlugin(plugin);
@@ -1044,6 +1139,7 @@
     settingsPages = Object.create(null); settingsRows = Object.create(null); settingsSurfaces = Object.create(null);
     interceptors = Object.create(null);
     menuItems = Object.create(null);
+    serviceHandlers = Object.create(null); serviceNames = Object.create(null);
   };
   global.__wgDidStop = function () {
     stopped = true;

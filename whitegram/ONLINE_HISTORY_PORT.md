@@ -1,97 +1,80 @@
-# Contact online history
+# Contact online history — Beta 3.2 original v2 compatibility
 
-Source increment, 2026-10-16, included in [build 34642](BUILD_34642.md).
-Native CI and release compilation passed; physical-device comparison remains pending.
+Target source: Telegram `release-13.0.0`,
+`f1dd7a2dbd02cbbf513e75d5695d8d36d1cf5838`.
+See [HISTORY_PORT.md](HISTORY_PORT.md) for parent integration, spy consumers,
+the verified original IPA identity and executable verification commands.
 
-## Recovered observations
+## Fresh shipped-artifact observations
 
-The retained 3.1.1 audit indexes `TelegramCoreFramework` as image 46:
+The supplied Beta 3.2 IPA SHA-256 was reverified as
+`5cf287812de7707dd21256281e645c29a9a5c0da3f66910746254842fce5ffbf`.
+Local wgtool inspected TelegramCoreFramework ARM64 bytes:
 
-- `SGOnlineHistoryEntry` exposes `peerId: Int64`, `peerName: String`, optional
-  `peerUsername`, `isOnline`, `isContact` and `timestamp: Double`.
-- `SGOnlineHistoryStore.append` at `0x1ea09c` compares a peer's previous online
-  state (`0x1ea0f8`–`0x1ea10c`) and skips an unchanged state. Its append path caps
-  the array at `0x7d0` (2000) entries and invokes the JSON persistence helper.
-- The capture path at `0x9a4b14` checks `Transaction.isPeerContact`, resolves
-  the peer's display name and username, takes `Date().timeIntervalSince1970`
-  at `0x9a4c1c`–`0x9a4c20`, and appends at `0x9a4c7c`.
-- A second capture call is indexed at `0x3622fc`; its complete policy has not
-  been revalidated in this increment. Prior research recorded 50-row UI pages.
+- `SGOnlineHistoryStore.key` at `0x300b8` constructs `wg_onlineHistory_v2`
+  (cstring at `0xe98720`). `allEntries` `0x211d58` obtains UserDefaults Data,
+  JSON-decodes an array of `SGOnlineHistoryEntry`, and caches it. There is no
+  account/version envelope or UUID field in the original format.
+- Initializer `0x21136c`, decoder `0x21162c`, encoder `0x2119f8` establish
+  `peerId`, `peerName`, optional `peerUsername`, `isOnline`, `timestamp`, optional
+  **`serverTimestamp`** and `isContact`. The decoder uses `decodeIfPresent` for
+  `isContact`; an older record without it decodes false. It is retained as unknown
+  historical membership rather than silently dropped or converted to a contact.
+- The recovered 3.1.1 `append` (`0x1ea09c`) suppresses repeated online state and caps
+  2000 rows. Beta 3.2 retains the store/append shape (`0x211f20`) and 50-row UI
+  page-size symbol. Original capture hooks `0x39ae20`, `0x39aeb4` in function
+  `0x396808` test `onlineHistoryEnabled`.
 
-These are static observations from the retained `audit-full-3.1.1` SQLite
-index and `native/image-046.asm.gz`, not device observations. The audit's
-original IPA path is currently absent, so fresh SHA verification and fresh
-disassembly export could not be performed. The historical audit identifies
-IPA SHA-256 `ecc05aeff70eb2cc692ffcc07d0ee9c35a23b39b82b91d0803de1b54a10d0d6d`.
+These are static artifact observations, not an iPhone comparison.
+`tests/test_history_original.py` rechecks the hash, string, symbols and optional
+date/contact decode calls against the exact original bytes.
 
-## Installed behavior
+## Implemented migration and capture
 
-- `online_history_patches.py` hooks `updatePeerPresences` (API user responses)
-  and `updatePeerPresencesClean` (status updates). Both run after Telegram's
-  existing presence merge and pass only the accepted peer IDs. Existing
-  min-status handling, own-account exclusion and last-activity merging remain
-  in place.
-- Capture requires `onlineHistoryEnabled` and contact membership. It records
-  explicit API online/offline statuses, using the local observation time.
-  Recently/last-week/last-month/empty statuses do not invent offline events.
-  Expiry timers and typing activity do not synthesize history.
-- `WhitegramOnlineHistoryStore` serializes access, suppresses repeated states
-  per peer (also after reload), retains the latest 2000 observations and
-  publishes main-thread change notifications. Invalid archives are reported
-  and preserved until an explicit clear. Error logging excludes entry data.
-- The screen offers name/username/ID search, per-contact selection by tapping
-  an event, local-calendar date filtering, day groups, 50-row pages, live
-  refresh, an enable switch and account-wide clear with confirmation.
-- The generated catalog routes `onlineHistoryEnabled`, `onlineHistoryView`
-  and `onlineHistoryClear` to these consumers. `trackLastOnline` and
-  `saveReadDates` remain unresolved; this increment does not enable them.
+- Existing `ONLINE_HISTORY_RUNTIME_FILES` remains unchanged. Copy the updated
+  store/capture/controller in the same overlay installation pass.
+- `apply_online_history_patches` records API-user and explicit-status inputs only
+  after Telegram's accepted presence merge. Min-status/own-ID handling and native
+  last-activity merging remain. It composes with `apply_spy_patches` in either order.
+- New capture still requires enabled **contact** membership and explicit
+  online/offline status. Offline `wasOnline` is retained separately as
+  `serverTimestamp`; `timestamp` remains local receipt time. Online expiry values
+  are not treated as last-seen timestamps. Privacy-coarse statuses, typing and
+  expiry timers do not synthesize events.
+- The controller offers **Import original online history** when
+  `wg_onlineHistory_v2` exists. Its confirmation names the exact destination
+  account. `migrateOriginalForThisAccount` bounds/decodes/validates the entire array
+  before loading or merging the destination archive. Invalid/self/non-user peer
+  IDs, malformed dates/types and oversized strings fail without changing it.
+- Migration preserves original local/server times, name, username and contact
+  flag. It gives retained rows UUIDs once, matches exact observations on replay,
+  merges chronologically, caps the latest 2000, and reports newly retained rows.
+  The shared original bytes remain unchanged for recovery and explicit reassignment.
+- The current `WhitegramOnlineHistory.v1.<accountId>` envelope reads old rows without
+  serverTimestamp and exports/loads the optional addition. Existing modern archives
+  must have the matching account ID and unique UUIDs; corrupt archives are preserved
+  until the existing explicit clear action.
+- UI filtering/pagination continues to use receipt time. Offline rows can display
+  the separate original server last-seen date. Search, per-peer/date filters,
+  live updates, 50-row pages and full-account clear remain implemented.
 
-## Deliberate differences and remaining parity work
+## Verification executed
 
-Storage is account-scoped under `WhitegramOnlineHistory.v1.<accountId>` in
-UserDefaults, with a versioned JSON envelope and UUID row identities. The
-original shared `wg_onlineHistory_v2` archive is not automatically assigned to
-an account or imported. The old enable preference is read as a fallback.
-This schema and isolation choice are not claims of original-format parity.
-Account logout does not currently purge this separate archive automatically.
+- Six focused Python/source tests passed using the read-only assembled 13.0 source.
+- Spy tests verify both patch orders produce identical bytes, replay writes nothing,
+  late drift aborts all patch writes, and native read/presence source parses.
+- Ten online-history XCTest cases passed in the production Foundation runner under
+  WSL Swift 6.4. New cases cover old-v2 optional fields/server time, exact replay/
+  reload, explicit account isolation and malformed migration preserving both stores.
+- The combined Foundation runner passed **51 tests**. Three original-IPA checks
+  separately passed under the local recovery venv with fresh hash verification.
 
-The new ItemList screen is a functional reconstruction; exact original layout,
-all capture-path policy details, hidden-status behavior and original-format
-migration remain unverified. Capturing while the client is suspended or offline
-is limited to the updates Telegram actually supplies later.
+## Remaining boundaries
 
-## Verification
-
-- Root Python suite: **309 passed**, no skips, with the assembled/public source
-  environment variables set. Six new checks cover original/assembled patch
-  application, replay, no changes to native merge logic, atomic failure,
-  drift rejection, source syntax and catalog wiring.
-- Seven XCTest cases in `tests/history/WhitegramOnlineHistoryTests.swift` cover
-  transition replay/reload, account isolation, cap/filter/page behavior,
-  pending-write/clear ordering, corruption preservation, foreign-account
-  rejection and invalid observations. The existing history native CI runner
-  now includes these actual production store/query sources.
-- Native invocation on this Windows host returned **2: Swift unavailable**.
-  Subsequently GitHub run `38892851238` passed its native Swift suites (including
-  the history runner) and full TelegramCore/SettingsUI release compilation on macOS.
-- Catalog routing count: 52 unconnected rows, down from 55. This is not a
-  runtime parity or completion percentage.
-
-Device checks after a new native build:
-
-1. Enable capture; exercise online/offline transitions from a test contact.
-   Repeated status updates must not duplicate the latest state.
-2. Confirm noncontacts, own status and privacy-redacted statuses do not create
-   records. Exercise both initial user sync and explicit presence updates.
-3. Restart and switch accounts; verify isolation, ordering, filters and pages.
-4. Clear from both settings and the history screen; verify all account pages
-   are removed, another account is retained, and new events can be recorded.
-5. Disable capture, change language/theme and test iPad presentation.
-
-## USB checkpoint
-
-During this session usbmux briefly listed the connected iPhone, but it was
-absent by the lockdown/application-version probe and subsequent enumeration.
-PnP still listed the Apple USB interfaces. Installed WhiteGram version and
-pairing state were not obtained. This does not establish a driver incompatibility
-or failed Trust confirmation; earlier pairing-directory checks used wrong paths.
+The original shared archive cannot identify its account, so migration requires
+explicit binding rather than assigning it to the first active account. The parent
+owns logout cleanup and preference/account routing. UI and Postbox adapters still
+need the parent's macOS compilation/device checks. No events are reconstructed
+while the client receives no updates. Online history records contact transitions;
+the requested spy consumers are separately described in HISTORY_PORT.md, with the
+shipped-disabled original getters clearly distinguished from new implementation.

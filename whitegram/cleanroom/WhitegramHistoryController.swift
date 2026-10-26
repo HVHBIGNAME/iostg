@@ -214,10 +214,10 @@ private final class WhitegramHistoryCoordinator: NSObject, UIDocumentPickerDeleg
         self.controller?.present(alert, animated: true)
     }
 
-    private func export(deletedOnly: Bool = false) {
+    private func export(deletedOnly: Bool = false, originalFormat: Bool = false) {
         var query = self.query
         if deletedOnly { query.event = .deleted; query.text = "" }
-        self.store.export(matching: query) { [weak self] result in
+        let completion: (Result<Data, Error>) -> Void = { [weak self] result in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
                     let data = try result.get()
@@ -232,6 +232,8 @@ private final class WhitegramHistoryCoordinator: NSObject, UIDocumentPickerDeleg
                 }
             }
         }
+        if originalFormat { self.store.exportOriginalBackup(matching: query, completion: completion) }
+        else { self.store.export(matching: query, completion: completion) }
     }
 
     private static func removeExport(_ url: URL) {
@@ -252,6 +254,7 @@ private final class WhitegramHistoryCoordinator: NSObject, UIDocumentPickerDeleg
 
     func action(_ id: String) {
         guard let controller else { return }
+        if id == "exportOriginal" { self.export(deletedOnly: true, originalFormat: true); return }
         switch id {
         case "filter": self.selectEvent()
         case "order": self.selectOrder()
@@ -347,6 +350,9 @@ private func historyRows(_ coordinator: WhitegramHistoryCoordinator, strings: Wh
         for item in switches {
             rows.append(WhitegramHistoryRow(id: item.0, index: rows.count, section: 0, title: strings.text(item.1, item.2), value: WhitegramPreferences.bool(item.0)))
         }
+        rows.append(WhitegramHistoryRow(id: "showEditedStrikethrough", index: rows.count, section: 0,
+            title: WhitegramLocalization.string("s.showEditedStrikethrough", baseLanguage: coordinator.context.sharedContext.currentPresentationData.with { $0.strings.baseLanguageCode }),
+            value: WhitegramHistoryRuntime.policy.showEditedStrikethrough))
         action("chats", strings.text("Browse archived chats", "Чаты в архиве"))
         action("import", strings.text("Import JSON", "Импорт JSON"))
         action("opacity", strings.text("Deleted message opacity", "Непрозрачность удалённых"), detail: "\(Int((WhitegramHistoryRuntime.policy.deletedOpacity * 100).rounded()))%")
@@ -377,6 +383,7 @@ private func historyRows(_ coordinator: WhitegramHistoryCoordinator, strings: Wh
             action(operation.rawValue, strings.action(operation))
         }
         action("export", strings.text("Export matching versions", "Экспорт найденных версий"))
+        action("exportOriginal", strings.text("Export deleted text in original format", "Экспорт удалённого текста в исходном формате"))
         action("clear", strings.text("Clear matching versions", "Удалить найденные версии"))
     }
     let entries = coordinator.matchingEntries

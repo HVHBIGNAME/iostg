@@ -106,6 +106,7 @@ public final class WhitegramHistoryStore: NSObject {
         let expectedKey = "\(entry.peerId):\(entry.namespace):\(entry.messageId):\(entry.event.rawValue):\(entry.revision)"
         guard whitegramHistoryValidPeer(entry.peerId),
               entry.namespace == self.cloudNamespace, entry.messageId > 0, entry.key == expectedKey,
+              entry.messageDate >= 0, entry.editedAt.map({ $0 >= 0 }) ?? true,
               entry.text.utf8.count <= Self.maximumTextBytes + 3,
               entry.mediaCount >= 0, entry.mediaCount <= 1000,
               entry.capturedAt.isFinite, entry.capturedAt >= 0,
@@ -113,6 +114,9 @@ public final class WhitegramHistoryStore: NSObject {
               (entry.peerTitle?.utf8.count ?? 0) <= Self.maximumNameBytes,
               (entry.authorName?.utf8.count ?? 0) <= Self.maximumNameBytes else {
             throw WhitegramHistoryError.invalidArchive
+        }
+        if let entities = entry.entities {
+            guard entities.count <= 1024, entities.allSatisfy({ $0.isValid(in: entry.text) }) else { throw WhitegramHistoryError.invalidArchive }
         }
         if let authorId = entry.authorId, !whitegramHistoryValidPeer(authorId) {
             throw WhitegramHistoryError.invalidArchive
@@ -141,7 +145,12 @@ public final class WhitegramHistoryStore: NSObject {
         let archive = try JSONDecoder().decode(WhitegramHistoryArchive.self, from: data)
         guard archive.version == 1, archive.entries.count <= Self.maximumEntries else { throw WhitegramHistoryError.invalidArchive }
         guard archive.accountId == self.accountId else { throw WhitegramHistoryError.differentAccount }
-        for entry in archive.entries { try self.validate(entry) }
+        var seen: [String: WhitegramHistoryEntry] = [:]
+        for entry in archive.entries {
+            try self.validate(entry)
+            if let previous = seen[entry.key], previous != entry { throw WhitegramHistoryError.invalidArchive }
+            seen[entry.key] = entry
+        }
         return archive
     }
 
@@ -249,6 +258,23 @@ public final class WhitegramHistoryStore: NSObject {
                     catch { self.entries = previous; throw error }
                 }
                 return inserted.intersection(self.entries.keys).count
+            }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    public func exportOriginalBackup(matching query: WhitegramHistoryQuery, completion: @escaping (Result<Data, Error>) -> Void) {
+        queue.async {
+            let result = Result { () -> Data in
+                try self.load()
+                if self.pendingWrite || self.writeError != nil { try self.persist() }
+                let entries = whitegramHistoryRestorationEntries(query.apply(to: Array(self.entries.values)), scope: query.scope)
+                let original = try entries.map(WhitegramHistoryLegacyMessage.init)
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.sortedKeys]
+                let data = try encoder.encode(original)
+                guard data.count <= Self.maximumArchiveBytes else { throw WhitegramHistoryBackupError.invalidLegacyBackup }
+                return data
             }
             DispatchQueue.main.async { completion(result) }
         }

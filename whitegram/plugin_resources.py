@@ -8,11 +8,13 @@ from source_patches import SourcePatches
 SDK_FILES = (
     "whitegram-native-bootstrap.js", "whitegram-sdk-core.js", "whitegram-plugin-lifecycle.js",
     "whitegram-sdk-extensions.js", "whitegram-sdk-bridge.js", "whitegram-plugin-host.js",
+    "whitegram-typescript-transpiler.js",
 )
 
 
 def install_plugin_resources(root: Path, overlay: Path):
     source = overlay / "cleanroom" / "pluginsdk"
+    files = SDK_FILES + (("typescript-compiler.js",) if (source / "typescript-compiler.js").is_file() else ())
     for name in SDK_FILES:
         if not (source / name).is_file():
             raise ValueError(f"Missing plugin SDK resource: {name}")
@@ -27,14 +29,14 @@ def install_plugin_resources(root: Path, overlay: Path):
         patches.replace("plugin-sdk-resources", build, anchor, bundle_import + "\n" + anchor)
     anchor = 'ios_application(\n    name = "Telegram",'
     bundle = 'apple_resource_bundle(\n    name = "WhitegramPluginSDK",\n    infoplists = ["WhitegramPluginSDK/Info.plist"],\n    resources = [\n'
-    bundle += "".join(f'        "WhitegramPluginSDK/{name}",\n' for name in SDK_FILES)
+    bundle += "".join(f'        "WhitegramPluginSDK/{name}",\n' for name in files)
     bundle += '    ],\n    visibility = ["//visibility:public"],\n)\n\n'
     patches.replace("plugin-sdk-resources", build, anchor, bundle + anchor)
     anchor = '    resources = [\n        ":LaunchScreen",'
     patches.replace("plugin-sdk-resources", build, anchor, anchor + '\n        ":WhitegramPluginSDK",')
     destination = root / "Telegram" / "WhitegramPluginSDK"
     destination.mkdir(parents=True, exist_ok=True)
-    for name in SDK_FILES:
+    for name in files:
         (destination / name).write_bytes((source / name).read_bytes())
     (destination / "Info.plist").write_bytes(plistlib.dumps({
         "CFBundleIdentifier": "org.whitegram.PluginSDK", "CFBundleDevelopmentRegion": "en",

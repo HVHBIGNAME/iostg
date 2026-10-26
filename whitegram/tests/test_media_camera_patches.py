@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from media_camera_patches import CAMERA, DEVICE, FETCH, MEDIA_PICKER, MEDIA_RUNTIME_FILES, OUTPUT, PICKER, ROUND_SCREEN, _replace, apply_media_camera_patches, media_camera_patches
+from media_camera_patches import CAMERA, DEVICE, FETCH, MEDIA_PICKER, MEDIA_RUNTIME_FILES, OUTPUT, PICKER, ROUND_SCREEN, RECORDING, RECORDING_INTERACTION, _replace, apply_media_camera_patches, media_camera_patches
 from source_patches import SourcePatches
 from tree_sitter import Language, Parser
 import tree_sitter_swift
@@ -93,7 +93,7 @@ class MediaIntegrationTests(unittest.TestCase):
         once = dict(patches.pending)
         media_camera_patches(patches)
         self.assertEqual(once, patches.pending)
-        expected = {PICKER, FETCH, CAMERA, DEVICE, OUTPUT, ROUND_SCREEN, MEDIA_PICKER}
+        expected = {PICKER, FETCH, CAMERA, DEVICE, OUTPUT, ROUND_SCREEN, MEDIA_PICKER, RECORDING, RECORDING_INTERACTION}
         if CAMERA_FACTORY:
             expected.update((CAMERA_PROTOCOL, CAMERA_FACTORY))
         self.assertEqual(set(once), expected)
@@ -104,7 +104,7 @@ class MediaIntegrationTests(unittest.TestCase):
 
     def test_pristine_release_source_accepts_and_replays_all_media_hooks(self):
         patches = self.patches()
-        paths = (PICKER, FETCH, CAMERA, DEVICE, OUTPUT, ROUND_SCREEN, MEDIA_PICKER)
+        paths = (PICKER, FETCH, CAMERA, DEVICE, OUTPUT, ROUND_SCREEN, MEDIA_PICKER, RECORDING, RECORDING_INTERACTION)
         if CAMERA_FACTORY:
             paths += (CAMERA_PROTOCOL, CAMERA_FACTORY)
         for path in paths:
@@ -160,6 +160,24 @@ class MediaIntegrationTests(unittest.TestCase):
         self.assertIn("AVVideoAverageBitRateKey: WhitegramMediaSettings.current.roundVideoBitrateValue", output)
         self.assertIn("dimensions = videoMessageDimensions.cgSize", output)
         self.assertIn("if !WhitegramMediaSettings.current.staticZoomEnabled", patches.pending[ROUND_SCREEN])
+
+    def test_camera_picker_guards_authorization_and_persists_before_capture(self):
+        patches = self.patches()
+        media_camera_patches(patches)
+        source = patches.pending[RECORDING_INTERACTION]
+        start = source.index('}, beginMediaRecording:')
+        stop = source.index('}, finishMediaRecording:', start)
+        flow = source[start:stop]
+        self.assertIn('strongSelf.beginMediaRecordingRequestId += 1', flow)
+        self.assertIn('WhitegramMediaSettings.current.asksForRoundVideoCamera', flow)
+        self.assertIn('WhitegramMediaSettings.current.initialRoundVideoFrontCamera(selected: requestedVideoFrontCamera)', flow)
+        self.assertIn('self.lockMediaRecordingRequestId = requestId', flow)
+        choice = flow[flow.index('let choose: (Bool)'):]
+        self.assertLess(choice.index('beginMediaRecordingRequestId == requestId'), choice.index('selectRoundVideoCamera'))
+        self.assertLess(choice.index('selectRoundVideoCamera'), choice.index('authorizeCamera()'))
+        self.assertIn('TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_Cancel, action: {})', choice)
+        self.assertIn('initialFrontCamera: initialFrontCamera', patches.pending[RECORDING])
+        self.assertIn('let isFrontPosition = controller.initialFrontCamera', patches.pending[ROUND_SCREEN])
 
     def test_initial_back_camera_reaches_compositor_before_recording(self):
         patches = self.patches()

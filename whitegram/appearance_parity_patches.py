@@ -4,7 +4,6 @@ from pathlib import Path
 
 from source_patches import SourcePatches
 
-
 APPEARANCE_PARITY_RUNTIME_FILES = {
     "WhitegramAppearancePolicy.swift": "submodules/TelegramCore/Sources/Settings/WhitegramAppearancePolicy.swift",
     "WhitegramInformation.swift": "submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/WhitegramInformation.swift",
@@ -74,7 +73,9 @@ def _information_patches(patches):
     path = PEER + "PeerInfoScreen.swift"
     before = "            screenData,\n            self.forceIsContactPromise.get(),"
     after = "            combineLatest(screenData, WhitegramAppearanceSettings.signal()) |> map { data, _ in data },\n            self.forceIsContactPromise.get(),"
-    replace(patches, "appearance-profile-refresh", path, before, after)
+    patches.replace("appearance-profile-refresh", path, before, after, accepted_after=(
+        "            combineLatest(screenData, WhitegramAppearanceSettings.signal(), WhitegramClientInterfaceSettings.signal(), whitegramClientInterfaceProfileUpdates()) |> map { data, _, _, _ in data },\n            self.forceIsContactPromise.get(),",
+    ))
     path = PEER + "PeerInfoHeaderNode.swift"
     before = "        if let starRating = self.currentStarRating {\n"
     after = "        if !WhitegramAppearancePolicy.current.isEnabled(\"hideAccountRating\"), let starRating = self.currentStarRating {\n"

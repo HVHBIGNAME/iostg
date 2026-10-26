@@ -47,7 +47,8 @@ private final class WhitegramSettingsTransferCoordinator: NSObject, UIDocumentPi
     let entries = ValuePromise<[WhitegramSettingsTransferEntry]>([], ignoreRepeated: true)
     weak var controller: ItemListController?
     private let queue = DispatchQueue(label: "Whitegram.SettingsTransfer", qos: .userInitiated)
-    private let keychain = WhitegramSettingsArchiveKeychain()
+    private let keychain: WhitegramSettingsArchiveKeychain
+    private let settingsScope: WhitegramPreferences.Scope
     private var operation: WhitegramSettingsTransferWork?
     private var reader: WhitegramSettingsTransferDocumentRead?
     private var exportFile: WhitegramSettingsTransferExportFile?
@@ -58,7 +59,9 @@ private final class WhitegramSettingsTransferCoordinator: NSObject, UIDocumentPi
     private var status = "Choose an operation. Imports change only settings explicitly present in the archive."
     private var summary = "Port format v1. Original IPA backup compatibility is not established."
 
-    override init() {
+    init(scope: WhitegramPreferences.Scope) {
+        self.settingsScope = scope
+        self.keychain = WhitegramSettingsArchiveKeychain(scope: scope)
         super.init()
         observer = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in self?.cancelWork() }
         refresh()
@@ -88,8 +91,8 @@ private final class WhitegramSettingsTransferCoordinator: NSObject, UIDocumentPi
         if operation != nil { rows.append(WhitegramSettingsTransferEntry(stableId: "cancel", order: rows.count, text: "Cancel Pending Operation", action: true, enabled: true)) }
         for (id, text) in [("status", status), ("summary", summary),
             ("scope", "Exports contain allowlisted configuration only. API keys, Telegram sessions, plugin permissions/data, media paths and unrelated device preferences are excluded."),
-            ("keychain", "Keychain backups stay on this device, are available only while unlocked, and replace this port's previous settings backup."),
-            ("refresh", "Shared settings and public-fork mirrors refresh after import. Compact navigation/list modes can still require the public fork's restart/apply step.")] {
+            ("keychain", "Keychain backups stay on this device, are available only while unlocked, and are stored separately for the shared profile and each account."),
+            ("refresh", "The profile selected when this screen opened is used for every operation, including after switching accounts. Compact navigation/list modes can still require the public fork's restart/apply step.")] {
             rows.append(WhitegramSettingsTransferEntry(stableId: id, order: rows.count, text: text, action: false, enabled: true))
         }
         entries.set(rows)
@@ -98,10 +101,11 @@ private final class WhitegramSettingsTransferCoordinator: NSObject, UIDocumentPi
     func perform(_ id: String) {
         if id == "cancel" { cancelWork(); return }
         guard operation == nil, modal == nil else { return }
+        let settingsScope = self.settingsScope
         switch id {
         case WhitegramSettingsTransferAction.exportSettings.rawValue:
             run({
-                let snapshot = try WhitegramSettingsArchiveStore.exportSettings()
+                let snapshot = try WhitegramSettingsArchiveStore.exportSettings(scope: settingsScope)
                 return (snapshot, try WhitegramSettingsTransferExportFile(snapshot.archive))
             }, completed: { [weak self] result in
                 guard let self else { return }
@@ -123,7 +127,7 @@ private final class WhitegramSettingsTransferCoordinator: NSObject, UIDocumentPi
         case WhitegramSettingsTransferAction.saveSettingsToKeychain.rawValue:
             let keychain = self.keychain
             run({
-                let snapshot = try WhitegramSettingsArchiveStore.exportSettings()
+                let snapshot = try WhitegramSettingsArchiveStore.exportSettings(scope: settingsScope)
                 try keychain.save(snapshot.archive)
                 return snapshot
             }, completed: { [weak self] snapshot in
@@ -134,7 +138,7 @@ private final class WhitegramSettingsTransferCoordinator: NSObject, UIDocumentPi
             let keychain = self.keychain
             run({ try keychain.restore() }, completed: { [weak self] archive in self?.review(archive) })
         case "inspect":
-            run({ try WhitegramSettingsArchiveStore.exportSettings() }, completed: { [weak self] snapshot in
+            run({ try WhitegramSettingsArchiveStore.exportSettings(scope: settingsScope) }, completed: { [weak self] snapshot in
                 self?.describe(snapshot)
                 self?.status = "Portable configuration inspected. No settings were changed."
             })
@@ -263,8 +267,8 @@ private final class WhitegramSettingsTransferCoordinator: NSObject, UIDocumentPi
             self?.finishModal { [weak self] in
                 guard let self else { return }
                 do {
-                    let result = try WhitegramSettingsArchiveStore.importSettings(archive)
-                    self.status = "Applied \(result.importedKeys.count) settings. Shared preferences and public-fork mirrors refreshed."
+                    let result = try WhitegramSettingsArchiveStore.importSettings(archive, scope: self.settingsScope)
+                    self.status = "Applied \(result.importedKeys.count) settings to the selected profile."
                     if result.restartRecommended { self.status += " Apply/restart the public compact mode to update its cached layout." }
                 } catch { self.show(error) }
                 self.refresh()
@@ -275,7 +279,10 @@ private final class WhitegramSettingsTransferCoordinator: NSObject, UIDocumentPi
 }
 
 public func whitegramSettingsTransferController(context: AccountContext, action: WhitegramSettingsTransferAction? = nil) -> ViewController {
-    let coordinator = WhitegramSettingsTransferCoordinator()
+    let selected: WhitegramPreferences.Scope
+    do { selected = try WhitegramPreferences.scope(accountId: context.account.id.int64) }
+    catch { return whitegramAccountSettingsController(context: context) }
+    let coordinator = WhitegramSettingsTransferCoordinator(scope: selected)
     let signal = combineLatest(context.sharedContext.presentationData, coordinator.entries.get())
     |> deliverOnMainQueue
     |> map { presentationData, entries -> (ItemListControllerState, (ItemListNodeState, Any)) in

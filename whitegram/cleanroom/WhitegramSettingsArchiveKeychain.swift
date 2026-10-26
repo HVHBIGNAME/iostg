@@ -39,21 +39,27 @@ private struct WhitegramSettingsArchiveSystemKeychain: WhitegramSettingsArchiveK
 public final class WhitegramSettingsArchiveKeychain {
     private let access: WhitegramSettingsArchiveKeychainAccess
     private let service: String
+    private let account: String
     private let lock = NSLock()
 
-    public init() {
+    public init(scope: WhitegramPreferences.Scope = .shared) {
         self.service = (Bundle.main.bundleIdentifier ?? "Whitegram") + ".Whitegram.SettingsArchive.v1"
+        switch scope {
+        case .shared: self.account = "settings-v1"
+        case let .account(id): self.account = "settings-v1-account-" + String(id)
+        }
         self.access = WhitegramSettingsArchiveSystemKeychain()
     }
 
     init(service: String, access: WhitegramSettingsArchiveKeychainAccess) {
         self.service = service
+        self.account = "settings-v1"
         self.access = access
     }
 
     private var query: [String: Any] {
         return [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-                kSecAttrAccount as String: "settings-v1", kSecAttrSynchronizable as String: false]
+                kSecAttrAccount as String: account, kSecAttrSynchronizable as String: false]
     }
 
     public func save(_ archive: WhitegramSettingsArchive) throws {
@@ -93,7 +99,7 @@ public final class WhitegramSettingsArchiveKeychain {
 }
 #else
 public final class WhitegramSettingsArchiveKeychain {
-    public init() {}
+    public init(scope: WhitegramPreferences.Scope = .shared) {}
     public func save(_ archive: WhitegramSettingsArchive) throws { throw WhitegramSettingsArchiveKeychainError.unavailable }
     public func restore() throws -> WhitegramSettingsArchive { throw WhitegramSettingsArchiveKeychainError.unavailable }
 }

@@ -329,6 +329,24 @@ class HistoryPatchTests(unittest.TestCase):
         self.assertIn("WhitegramTranslationTextRules.validRange($0.range, in: original.text)", root.text(TEXT))
         self.assertIn("WhitegramTranslationTextRules.validRange(entity.range, in: originalText.string)", root.text(TEXT))
         self.assertNotIn("withUpdatedText", root.text(TEXT))
+        self.assertIn("originalText.addAttribute(.strikethroughStyle", root.text(TEXT))
+
+    def test_previous_original_block_upgrades_once_and_drift_is_atomic(self):
+        root = MemoryRoot(self.pristine)
+        apply_history_patches(root)
+        strike = "                    originalText.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: NSRange(location: 0, length: originalText.length))\n"
+        files = root.texts()
+        files[TEXT] = files[TEXT].replace(strike, "")
+        upgraded = MemoryRoot(files)
+        apply_history_patches(upgraded)
+        self.assertEqual(upgraded.files, root.files)
+        upgraded.writes.clear()
+        apply_history_patches(upgraded)
+        self.assertEqual(upgraded.writes, [])
+        files[TEXT] = root.text(TEXT).replace("NSUnderlineStyle.single.rawValue", "NSUnderlineStyle.double.rawValue")
+        broken = MemoryRoot(files)
+        with self.assertRaises(ValueError): apply_history_patches(broken)
+        self.assertEqual(broken.writes, [])
 
 
 class HistorySourceTests(unittest.TestCase):
@@ -357,7 +375,8 @@ class HistorySourceTests(unittest.TestCase):
         controller = (OVERLAY / "cleanroom/WhitegramHistoryController.swift").read_text(encoding="utf-8")
         self.assertIn("self.query.apply(to: self.records)", controller)
         self.assertIn("self?.store.clear(matching: query)", controller)
-        self.assertIn("self.store.export(matching: query)", controller)
+        self.assertIn("self.store.export(matching: query, completion: completion)", controller)
+        self.assertIn("self.store.exportOriginalBackup(matching: query, completion: completion)", controller)
         clear = controller.split("private func clear()", 1)[1].split("private func export(", 1)[0]
         self.assertLess(clear.index("let query = self.query"), clear.index("UIAlertController("))
         self.assertNotIn("self?.query", clear)
@@ -386,6 +405,8 @@ class HistorySourceTests(unittest.TestCase):
         self.assertNotIn("network.request", value)
         self.assertNotIn(".Unsent", value)
         self.assertNotIn("enqueueMessage", value)
+        self.assertLess(value.index("restoredEntities[entry.key] = try JSONDecoder()"), value.index("transaction.updateMessage(message.id)"))
+        self.assertIn("attributes.append(TextEntitiesMessageAttribute(entities: native))", value)
 
 
 if __name__ == "__main__":

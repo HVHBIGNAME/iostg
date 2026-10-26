@@ -31,6 +31,27 @@ struct WhitegramHistoryLegacyMessage: Codable {
     }
 }
 
+extension WhitegramHistoryLegacyMessage {
+    init(_ entry: WhitegramHistoryEntry) throws {
+        guard entry.textTruncated != true, let peer = whitegramHistoryUnpackedPeer(entry.peerId),
+              entry.namespace == 0, entry.messageId > 0 else { throw WhitegramHistoryBackupError.invalidLegacyBackup }
+        let author: (namespace: Int32, id: Int64)?
+        if let authorId = entry.authorId {
+            guard let unpacked = whitegramHistoryUnpackedPeer(authorId) else { throw WhitegramHistoryBackupError.invalidLegacyBackup }
+            author = unpacked
+        } else { author = nil }
+        self.init(peerIdNamespace: peer.namespace, peerIdId: peer.id, messageIdNamespace: entry.namespace,
+            messageIdId: entry.messageId, authorIdNamespace: author?.namespace, authorIdId: author?.id,
+            text: entry.text, timestamp: entry.messageDate, isOutgoing: entry.outgoing)
+    }
+}
+
+func whitegramHistoryUnpackedPeer(_ value: String) -> (namespace: Int32, id: Int64)? {
+    guard whitegramHistoryValidPeer(value), let raw = Int64(value) else { return nil }
+    let bits = UInt64(raw)
+    return (Int32((bits >> 32) & 7), Int64(((bits >> 35) << 32) | (bits & 0xffffffff)))
+}
+
 enum WhitegramHistoryBackupError: LocalizedError {
     case invalidLegacyBackup
 
@@ -53,7 +74,14 @@ func whitegramHistoryValidPeer(_ value: String) -> Bool {
 
 public func whitegramHistoryRestorationEntries(_ entries: [WhitegramHistoryEntry], scope: WhitegramHistoryScope) -> [WhitegramHistoryEntry] {
     var seen = Set<WhitegramHistoryMessageId>()
-    return WhitegramHistoryQuery(scope: scope, order: .captureTime).apply(to: entries)
+    return WhitegramHistoryQuery(scope: scope, order: .captureTime).apply(to: entries).sorted {
+            // Revision is authoritative within a message. Import time must not
+            // make an old revision-zero original backup displace a newer capture.
+            if $0.messageIdentity == $1.messageIdentity, $0.revision != $1.revision { return $0.revision > $1.revision }
+            if $0.messageIdentity != $1.messageIdentity { return $0.key < $1.key }
+            if $0.capturedAt != $1.capturedAt { return $0.capturedAt > $1.capturedAt }
+            return $0.key < $1.key
+        }
         .filter { $0.event != .edited && seen.insert($0.messageIdentity).inserted }
         .sorted {
             if $0.messageDate != $1.messageDate { return $0.messageDate < $1.messageDate }

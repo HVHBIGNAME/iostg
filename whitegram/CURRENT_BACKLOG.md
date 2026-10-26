@@ -1,76 +1,37 @@
 # Remaining Whitegram implementation work
 
-Updated 2026-10-18 after the profile-metadata, feedback and original-icons source increment.
+Updated 2026-10-26 for the build-34652 client integration.
 **The client is not feature-complete.** The recovered catalog still
-has **45 rows without UI routes**, including previews and informational text.
+has **1 row without a UI route**: `hideOthersCustomMessageStyle`.
 This is a routing count, not a percentage of implemented behavior. Reachable
 screens also require behavioral/parity validation; the original 333-row audit in
 `FEATURE_COVERAGE.md` is historical and cannot be used as current completion data.
 
 ## Unconnected catalog rows
 
-### Previews (2)
-- [ ] `chatListPreview`
-- [ ] `tabBarPreview`
-
-### Appearance/layout (10)
-- [ ] `profileCoverPhoto`
-- [ ] `resetProfileCoverPhoto`
-- [ ] `videoChatBackground`
-- [ ] `resetVideoBackground`
-- [ ] `videoBackgroundInProfile`
-- [ ] `newChatListUI`
-- [ ] `newChatHeaderStyle`
-- [ ] `classicInterface` — existing glass suppression is not the whole classic layout
-- [ ] `oledMode`
-- [ ] `reactionButtonGlow`
-
-### Navigation/account presentation (6)
-- [ ] `hideSettingsReorderAccounts`
-- [ ] `showPostsFeed`
-- [ ] `separateProfileTab`
-- [ ] `hideBottomTabBar` — a compact bar is not the original hidden-bar behavior
-- [ ] `localPremium`
-- [ ] `unlimitedPinnedChats` — needs a real local ordering model, not a raised server limit
-
-### Chat, identity and anti-scam behavior (5)
-- [ ] `hideChannelAdsInfo`
-- [ ] `chatScrollAnimation` — recovered description requires bubble inertia/depth
-- [ ] `scammerProtection` — signed database exists; a verified live UI consumer is missing
-- [ ] `deferredMessages`
-- [ ] `fakeDeviceName`
-
-### Presence/read history (2)
-- [ ] `trackLastOnline`
-- [ ] `saveReadDates`
-
-### Profile and media effects (9)
-- [ ] `roundProfileButtons`
-- [ ] `wgBubbleFisheyeEffect`
-- [ ] `profileColorEffect`
-- [ ] `avatarBlurEffect`
-- [ ] `avatarBlurInProfile`
-- [ ] `avatarBlurReduced`
-- [ ] `avatarBlurTint`
-- [ ] `avatarGlow`
-- [ ] `albumArtBlur`
-
-### Other effects and feedback (5)
-- [ ] `appBadgeColorIsBlack`
-- [ ] `particleEffectPicker`
-- [ ] `particleModePicker`
-- [ ] `particleSpeedSlider`
-- [ ] `particleDensitySlider`
-
-### Remote profile surfaces and remaining text (6)
-- [ ] `hideWhitegramUserBadge`
-- [ ] `hideWhitegramUserBadgeInfo`
 - [ ] `hideOthersCustomMessageStyle`
-- [ ] `hideOthersCustomMessageStyleInfo`
-- [ ] `iconPackSitePreview`
-- [ ] `iconsInfo`
 
-## Gates for marking a feature complete
+This row depends on other-user style delivery/cache, which is absent in the
+current client. The help row is connected. No writable no-op toggle is provided.
+
+## Build 34652 validation still required
+
+Account profiles, local pins, navigation/backgrounds, previews, client/device
+controls, presence/read capture, visual effects, feed and classic adapters now
+have installed consumers. See [BUILD_34652.md](BUILD_34652.md) and the corresponding
+`*_PORT.md` documents for their actual contracts and original-parity gaps.
+
+- [ ] Apple SDK release/simulator compilation of the entire increment.
+- [ ] Device checks for account switching, filter deletion, pin ordering and media lifecycle.
+- [ ] Original visual/interaction comparison, including inline feed media and classic layout.
+- [ ] Original private-settings absent-key migration/tombstone semantics.
+- [ ] Remaining badge variants and remote custom-message style delivery.
+
+The anti-scam consumer reads the existing legacy cache. The previous backlog's
+claim that a signed-database verifier exists was not substantiated; see
+[REMAINING_PRESENTATION_PORT.md](REMAINING_PRESENTATION_PORT.md).
+
+## Earlier build evidence and completion gates
 
 Build-34646 sources connect `showOriginalTelegramIcons`, `customSettingsIcons`,
 `inAppVibration`, `showMutualContactsCard` and `showRegistrationDateCard`.

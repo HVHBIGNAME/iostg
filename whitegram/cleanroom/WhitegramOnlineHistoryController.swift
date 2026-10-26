@@ -77,6 +77,22 @@ private final class WhitegramOnlineHistoryCoordinator {
         controller?.present(alert, animated: true)
     }
 
+    private func migrateOriginal() {
+        let accountId = context.account.peerId.toInt64()
+        let alert = UIAlertController(title: text("Import original online history?", "Импортировать исходную историю онлайна?"),
+            message: text("The original shared archive has no account identifier. Assign its records to account \(accountId)?", "В исходном общем архиве не указан аккаунт. Назначить записи аккаунту \(accountId)?"), preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: text("Cancel", "Отмена"), style: .cancel))
+        alert.addAction(UIAlertAction(title: text("Import", "Импортировать"), style: .default, handler: { [weak self] _ in
+            self?.store.migrateOriginalForThisAccount { [weak self] result in
+                switch result {
+                case .success: self?.reload()
+                case .failure: self?.error()
+                }
+            }
+        }))
+        controller?.present(alert, animated: true)
+    }
+
     private func search() {
         let alert = UIAlertController(title: text("Find contact", "Найти контакт"), message: text("Name, username or peer ID", "Имя, username или ID контакта"), preferredStyle: .alert)
         alert.addTextField { $0.text = self.query.text }
@@ -126,6 +142,7 @@ private final class WhitegramOnlineHistoryCoordinator {
         case "all": query = WhitegramOnlineHistoryQuery(); queryChanged()
         case "clear": clear()
         case "reload": reload()
+        case "migrate": migrateOriginal()
         case "more": limit += WhitegramOnlineHistoryStore.pageSize; changed()
         default:
             if let entry = entries.first(where: { $0.id.uuidString == id }) {
@@ -151,6 +168,9 @@ private final class WhitegramOnlineHistoryCoordinator {
         row("all", text("All contacts and dates", "Все контакты и даты"))
         row("clear", text("Clear online history", "Очистить историю онлайна"))
         row("reload", text("Refresh", "Обновить"))
+        if UserDefaults.standard.object(forKey: "wg_onlineHistory_v2") != nil {
+            row("migrate", text("Import original online history", "Импортировать исходную историю онлайна"))
+        }
         row("scope", text("Only observed contact status changes are stored, while this client receives updates. Tap an event to filter by contact.", "Сохраняются полученные этим клиентом изменения статуса контактов. Нажмите на событие для фильтра по контакту."), info: true)
         if failed {
             row("error", text("Could not read online history. Existing data has not been replaced.", "Не удалось прочитать историю онлайна. Существующие данные не перезаписаны."), info: true)
@@ -176,7 +196,11 @@ private final class WhitegramOnlineHistoryCoordinator {
             }
             formatter.dateStyle = .none; formatter.timeStyle = .medium
             let state = entry.isOnline ? text("Online", "В сети") : text("Offline", "Не в сети")
-            row(entry.id.uuidString, entry.peerName, detail: state + " · " + formatter.string(from: date), section: section)
+            var detail = state + " · " + formatter.string(from: date)
+            if let serverTimestamp = entry.serverTimestamp {
+                detail += " · " + text("Last seen", "Последний онлайн") + ": " + DateFormatter.localizedString(from: Date(timeIntervalSince1970: serverTimestamp), dateStyle: .short, timeStyle: .medium)
+            }
+            row(entry.id.uuidString, entry.peerName, detail: detail, section: section)
         }
         if matching.isEmpty { row("empty", text("No events match these filters.", "По этим фильтрам событий нет."), section: 1, info: true) }
         if matching.count > limit { row("more", text("Show 50 more", "Показать ещё 50"), section: section + 1) }

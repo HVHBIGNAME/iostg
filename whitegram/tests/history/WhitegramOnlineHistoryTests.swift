@@ -121,4 +121,43 @@ final class WhitegramOnlineHistoryTests: XCTestCase {
         do { _ = try await snapshot(store); XCTFail("Unsupported date reached the UI snapshot") } catch {}
         XCTAssertEqual(defaults.data(forKey: store.storageKey), data)
     }
+
+    func testOriginalV2MigrationPreservesSchemaTimeContactAndReplay() async throws {
+        let original = Data("""
+        [{"peerId":201,"peerName":"Original","isOnline":true,"timestamp":1700000000},
+         {"peerId":201,"peerName":"Original","peerUsername":"person","isOnline":false,"isContact":true,"timestamp":1700000050,"serverTimestamp":1700000040}]
+        """.utf8)
+        defaults.set(original, forKey: "wg_onlineHistory_v2")
+        let store = self.store()
+        let added: Int = try await withCheckedThrowingContinuation { continuation in store.migrateOriginalForThisAccount { continuation.resume(with: $0) } }
+        XCTAssertEqual(added, 2)
+        let entries = try await snapshot(store)
+        XCTAssertEqual(entries.map(\.isContact), [false, true])
+        XCTAssertEqual(entries.last?.serverTimestamp, 1700000040)
+        let reopened = self.store()
+        let replay: Int = try await withCheckedThrowingContinuation { continuation in reopened.migrateOriginalForThisAccount { continuation.resume(with: $0) } }
+        XCTAssertEqual(replay, 0)
+        let cold = try await snapshot(reopened)
+        XCTAssertEqual(entries, cold)
+        XCTAssertEqual(defaults.data(forKey: "wg_onlineHistory_v2"), original)
+        let other = try await snapshot(self.store(102))
+        XCTAssertTrue(other.isEmpty)
+    }
+
+    func testMalformedLegacyMigrationDoesNotTouchExistingModernArchive() async throws {
+        let store = self.store()
+        store.append([entry()])
+        let before = try await snapshot(store)
+        for fragment in ["\"peerId\":-1", "\"peerId\":101", "\"peerId\":201,\"serverTimestamp\":-1", "\"peerId\":201,\"isContact\":1"] {
+            let original = Data(("[{" + fragment + ",\"peerName\":\"Bad\",\"isOnline\":false,\"timestamp\":1700000050}]").utf8)
+            defaults.set(original, forKey: "wg_onlineHistory_v2")
+            do {
+                let _: Int = try await withCheckedThrowingContinuation { continuation in store.migrateOriginalForThisAccount { continuation.resume(with: $0) } }
+                XCTFail("Malformed original archive accepted")
+            } catch {}
+            let after = try await snapshot(store)
+            XCTAssertEqual(after, before)
+            XCTAssertEqual(defaults.data(forKey: "wg_onlineHistory_v2"), original)
+        }
+    }
 }

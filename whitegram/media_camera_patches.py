@@ -20,6 +20,127 @@ DEVICE = "submodules/Camera/Sources/CameraDevice.swift"
 OUTPUT = "submodules/Camera/Sources/CameraOutput.swift"
 ROUND_SCREEN = "submodules/TelegramUI/Components/VideoMessageCameraScreen/Sources/VideoMessageCameraScreen.swift"
 MEDIA_PICKER = "submodules/MediaPickerUI/Sources/MediaPickerScreen.swift"
+RECORDING = "submodules/TelegramUI/Sources/Chat/ChatControllerMediaRecording.swift"
+RECORDING_INTERACTION = "submodules/TelegramUI/Sources/Chat/ChatControllerLoadDisplayNode.swift"
+
+
+def round_camera_choice_patches(patches: SourcePatches) -> None:
+    anchor = "            let requestId = strongSelf.beginMediaRecordingRequestId\n"
+    _replace(patches, RECORDING_INTERACTION, anchor, "            strongSelf.beginMediaRecordingRequestId += 1\n" + anchor + "            var requestedVideoFrontCamera: Bool?\n", previous=anchor + "            var requestedVideoFrontCamera: Bool?\n")
+    pristine = "                            strongSelf.requestVideoRecorder()\n"
+    assembled = '''                            let settings = WhiteGramChatSettings.current
+                            let startWithFrontCamera: Bool
+                            switch settings.videoMessageCamera {
+                            case .front:
+                                startWithFrontCamera = true
+                            case .back:
+                                startWithFrontCamera = false
+                            case .ask:
+                                startWithFrontCamera = requestedVideoFrontCamera ?? true
+                            }
+                            strongSelf.requestVideoRecorder(initialFrontCamera: startWithFrontCamera)
+'''
+    _replace(patches, RECORDING_INTERACTION, pristine, '''                            let startWithFrontCamera = WhitegramMediaSettings.current.initialRoundVideoFrontCamera(selected: requestedVideoFrontCamera)
+                            strongSelf.requestVideoRecorder(initialFrontCamera: startWithFrontCamera)
+''', previous=assembled)
+    # Own only the video authorization arm; voice confirmation belongs to the voice patcher.
+    pristine = '''                if isVideo {
+                    DeviceAccess.authorizeAccess(to: .camera(.video), presentationData: strongSelf.presentationData, present: { c, a in
+                        self?.present(c, in: .window(.root), with: a)
+                    }, openSettings: {
+                        self?.context.sharedContext.applicationBindings.openSettings()
+                    }, { granted in
+                        if granted {
+                            begin()
+                        }
+                    })
+                } else {
+                    begin()
+                }
+'''
+    assembled = '''                if isVideo {
+                    let authorizeCamera: () -> Void = {
+                        DeviceAccess.authorizeAccess(to: .camera(.video), presentationData: strongSelf.presentationData, present: { c, a in
+                            self?.present(c, in: .window(.root), with: a)
+                        }, openSettings: {
+                            self?.context.sharedContext.applicationBindings.openSettings()
+                        }, { granted in
+                            if granted {
+                                begin()
+                            } else {
+                                self?.lockNextMediaRecordingOnStart = false
+                            }
+                        })
+                    }
+                    if WhiteGramChatSettings.current.videoMessageCamera == .ask {
+                        strongSelf.present(textAlertController(context: strongSelf.context, updatedPresentationData: strongSelf.updatedPresentationData, title: "Камера видеосообщения", text: "Выберите камеру для записи видеосообщения.", actions: [
+                            TextAlertAction(type: .defaultAction, title: "Фронтальная", action: {
+                                requestedVideoFrontCamera = true
+                                strongSelf.lockNextMediaRecordingOnStart = true
+                                authorizeCamera()
+                            }),
+                            TextAlertAction(type: .genericAction, title: "Задняя", action: {
+                                requestedVideoFrontCamera = false
+                                strongSelf.lockNextMediaRecordingOnStart = true
+                                authorizeCamera()
+                            }),
+                            TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_Cancel, action: {
+                            })
+                        ]), in: .window(.root))
+                    } else {
+                        authorizeCamera()
+                    }
+                } else {
+                    begin()
+                }
+'''
+    after = '''                guard strongSelf.beginMediaRecordingRequestId == requestId else { return }
+                if isVideo {
+                    let authorizeCamera: () -> Void = { [weak self] in
+                        guard let self, self.beginMediaRecordingRequestId == requestId else { return }
+                        DeviceAccess.authorizeAccess(to: .camera(.video), presentationData: self.presentationData, present: { [weak self] c, a in
+                            self?.present(c, in: .window(.root), with: a)
+                        }, openSettings: { [weak self] in
+                            self?.context.sharedContext.applicationBindings.openSettings()
+                        }, { granted in
+                            if granted { begin() }
+                        })
+                    }
+                    if WhitegramMediaSettings.current.asksForRoundVideoCamera {
+                        let language = strongSelf.presentationData.strings.baseLanguageCode
+                        let choose: (Bool) -> Void = { [weak self] front in
+                            guard let self, self.beginMediaRecordingRequestId == requestId else { return }
+                            if WhitegramMediaSettings.current.chooseCameraBeforeRoundVideo && !WhitegramMediaSettings.selectRoundVideoCamera(front: front) {
+                                self.present(textAlertController(context: self.context, title: nil, text: WhitegramLocalization.string("common.error", baseLanguage: language), actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                                return
+                            }
+                            requestedVideoFrontCamera = front
+                            self.lockMediaRecordingRequestId = requestId
+                            authorizeCamera()
+                        }
+                        strongSelf.present(textAlertController(context: strongSelf.context, updatedPresentationData: strongSelf.updatedPresentationData, title: WhitegramLocalization.string("s.chooseCameraBeforeRoundVideo", baseLanguage: language), text: "", actions: [
+                            TextAlertAction(type: .defaultAction, title: WhitegramLocalization.string("s.cameraFront", baseLanguage: language), action: { choose(true) }),
+                            TextAlertAction(type: .genericAction, title: WhitegramLocalization.string("s.cameraBack", baseLanguage: language), action: { choose(false) }),
+                            TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Common_Cancel, action: {})
+                        ]), in: .window(.root))
+                    } else {
+                        authorizeCamera()
+                    }
+                } else {
+                    begin()
+                }
+'''
+    _replace(patches, RECORDING_INTERACTION, pristine, after, previous=assembled)
+    _replace(patches, RECORDING, "    func requestVideoRecorder() {\n", "    func requestVideoRecorder(initialFrontCamera: Bool = true) {\n")
+    anchor = "                    viewOnceAvailable: viewOnceAvailable,\n"
+    _replace(patches, RECORDING, anchor, anchor + "                    initialFrontCamera: initialFrontCamera,\n")
+    _replace(patches, ROUND_SCREEN, '            let isFrontPosition = "".isEmpty\n', "            let isFrontPosition = controller.initialFrontCamera\n")
+    anchor = "    fileprivate var viewOnceAvailable: Bool\n"
+    _replace(patches, ROUND_SCREEN, anchor, anchor + "    fileprivate let initialFrontCamera: Bool\n")
+    anchor = "        viewOnceAvailable: Bool,\n"
+    _replace(patches, ROUND_SCREEN, anchor, anchor + "        initialFrontCamera: Bool = true,\n")
+    anchor = "        self.viewOnceAvailable = viewOnceAvailable\n"
+    _replace(patches, ROUND_SCREEN, anchor, anchor + "        self.initialFrontCamera = initialFrontCamera\n")
 
 
 def _replace(patches: SourcePatches, path: str, before: str, after: str, *, previous: str | None = None, count: int = 1) -> None:
@@ -59,6 +180,7 @@ def _replace(patches: SourcePatches, path: str, before: str, after: str, *, prev
 
 
 def media_camera_patches(patches: SourcePatches) -> None:
+    round_camera_choice_patches(patches)
     if "public enum Camera {" in patches.read(CAMERA):
         _replace(patches, ROUND_SCREEN, "            if useModernVideoMessagePipeline {\n",
                  "            if useModernVideoMessagePipeline && WhitegramMediaSettings.current.useTelegramCameraSettings && !WhitegramMediaSettings.current.rememberLastCamera {\n")

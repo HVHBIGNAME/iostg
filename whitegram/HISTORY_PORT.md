@@ -1,228 +1,176 @@
-# Connected message history
+# Client history compatibility — Telegram 13.0.0 / Beta 3.2
 
-This slice connects the local archive to Telegram's message context menu, adds
-message/chat-scoped browsing, and retains bounded attachment metadata. The source
-baseline is Telegram `release-12.9.2`, commit
-`6ad963e5b62d354da79040f388ae2b9132fb17b8`; application metadata remains the parent's
-`12.9.4` / `34639` integration.
+Source pin: `f1dd7a2dbd02cbbf513e75d5695d8d36d1cf5838` (`release-13.0.0`).
+Pristine files were read with `git show`; the assembled
+`C:\Users\Pisun4ik\AppData\Local\Temp\opencode\whitegram-source-13.0.0`
+was used read-only. Patches execute against an in-memory source fixture.
 
-## Parent integration — required
+## Parent integration
 
-In `compat-12.9.4.py`, add these entries to `cleanroom_files`:
+`HISTORY_RUNTIME_FILES` now also maps these files into TelegramCore `Sources/`:
 
-```python
-"cleanroom/WhitegramHistoryModels.swift": "submodules/TelegramCore/Sources/WhitegramHistoryModels.swift",
-"cleanroom/WhitegramHistoryCapture.swift": "submodules/TelegramCore/Sources/WhitegramHistoryCapture.swift",
-"cleanroom/WhitegramHistoryPresentation.swift": "submodules/SettingsUI/Sources/WhitegramHistoryPresentation.swift",
-```
+- `WhitegramHistoryEntities.swift`
+- `WhitegramSpyStore.swift`
+- `WhitegramSpyRuntime.swift`
 
-The existing `WhitegramHistoryStore.swift` and `WhitegramHistoryController.swift`
-install entries must copy their updated contents in the same assembly pass. The
-store's model declarations and Telegram capture adapter now live in the two new
-TelegramCore files, and the controller shares its rows/detail screen with the new
-SettingsUI file. Installing only the two previously mapped files will not compile.
+Continue installing the entire existing map and invoking `apply_history_patches`.
+Add `from spy_patches import apply_spy_patches` and invoke
+`apply_spy_patches(source_root)` once. The optional `SPY_RUNTIME_FILES` map contains
+the same two spy files; do not install duplicate Swift declarations. Spy and
+online-history patchers compose in either order and replay without source writes.
+Each patcher validates all of its source edits before committing any writes.
 
-The existing `apply_history_patches(source_root)` invocation applies the new menu
-hook as well as the capture hooks. Its current position after the public API and
-interface adaptations is suitable. The inspected TelegramCore/SettingsUI targets
-glob `Sources/**/*.swift`; TelegramUI already depends on and imports SettingsUI at
-the menu hook. All imported modules are already direct dependencies of the inspected
-targets.
+The spy patcher edits accepted presence consumers in `UpdatePeers.swift`, exact
+message read-date consumption in `MessageReadStats.swift`, and the existing presence
+formatting call in both chat-title implementations and `PeerInfoData.swift`.
+It introduces no new build-target dependency: all three UI sites already import
+TelegramCore and TelegramStringFormatting, and receive explicit AccountContext IDs.
 
-The existing main-menu call `whitegramHistoryController(context: context)` remains
-valid. Additional source-level entry points are:
+Parent-owned preferences/catalog/capability routing still needs to expose
+`showEditedStrikethrough`, `trackLastOnline` and `saveReadDates`. Suggested capability
+classification after spy integration is `settings`, with the spy limitations below.
+The existing localization key `s.showEditedStrikethrough` is used by the history
+screen; no localization-table edits are required. The spy runtime reads canonical
+preferences with original `wg_` fallback. Account logout/registry cleanup and
+parent-wide account preference scoping remain parent integration work.
 
-```swift
-whitegramMessageHistoryController(context: context, messageId: message.id)
-whitegramHistoryController(context: context, scope: .peer(String(peerId.toInt64())))
-whitegramHistoryController(context: context, event: .deleted)
-whitegramHistoryController(context: context, event: .edited)
-```
+## Verified original evidence
 
-The normal message-menu action already calls the first entry point. The parent's
-generated-settings `case "history"` can use the event parameter to preselect
-`.deleted` for `clearDeletedCache` / `exportDeletedBackup` and `.edited` for
-`clearEditedCache`; navigation itself does not clear or export anything. Import is
-an account-level action on the archive root. No preference schema change is needed
-for this slice.
-
-Include the focused source checks in the parent's source-validation step and run
-the Foundation tests on the Apple runner before the application build:
+Fresh SHA-256 verification of the supplied IPA:
 
 ```text
-python -B -m unittest discover -s whitegram/tests -p "test_history*.py" -v
-python -B whitegram/tests/history/run_native.py
+Whitegram Beta 3.2 (13.0) [tg@heypaintech].ipa
+5cf287812de7707dd21256281e645c29a9a5c0da3f66910746254842fce5ffbf
 ```
 
-`WHITEGRAM_ASSEMBLED_SOURCE` must name the assembled checkout for the source checks.
-The source tests are also discoverable by the parent's existing root `test_*.py`
-command. `run_native.py` returns **2** when Swift is absent, and stages the exact
-production store/models in a disposable SwiftPM package. It does not compile the
-Telegram capture adapter or UIKit controllers; those require the application build.
+Local `wgtool.binary.MachO` inspected original ARM64 bytes without running them.
+The recoveries under `whitegram-rebuild/recovered-3.2` / `recovered-3.1.1`
+provide complementary symbols/hooks; the following claims use fresh Beta 3.2 bytes.
 
-## Original evidence
-
-Evidence root: `C:\coding\telegram\whitegram\whitegram-rebuild`.
-
-| Evidence | What it establishes |
+| Original coordinate | Observation |
 | --- | --- |
-| `menu-cases-3.1.1/MENU_CASES.md`, cases 4, 6, 9–14, 16–17 | Deleted/edited switches, received-history saving, history clearing/restoration entry, deleted-backup import/export and separate cache clearing |
-| The same menu audit, cases 120–124 | Own/bot exclusions and deleted-message opacity control |
-| `recovered-3.1.1/WGRecoveredPreferenceKeys.swift` | Original `wg_showDeletedMessages`, `wg_showEditedOriginalText`, `wg_saveChatHistory`, `wg_saveDeletedMessagesToBackup` keys |
-| `recovered-3.1.1/native/TelegramCoreFramework-0/hooks.json`, caller `0x35dbbc`, calls `0x35f170`, `0x35f178`, `0x35f688`, `0x35f690` | Core calls into deleted-message, received-history and deleted-backup settings |
-| `recovered-3.1.1/native/TelegramUIFramework-0/hooks.json`, caller `0x8d16b8`, calls `0x8d67f8`–`0x8d697c` | UI checks global history settings and parsed per-chat deleted/edited exclusions |
-| The same UI hooks, caller `0x1582b08`, calls `0x1583efc`–`0x15844c4` | Sticker presentation checks deleted/edited and bot settings and constructs date/status arguments with `wgPrefixIcon` |
+| TelegramCore `0x21e720`, fallback `0x21e7d0` | `showEditedStrikethrough` getter defaults to true (`mov w19, #1`) |
+| TelegramUI `0x189098c`–`0x1890a30` | Checks `showEditedOriginalText`, then `showEditedStrikethrough`, per-chat/bot filters, and nonempty changed original text before entering appended original rendering at `0x1891450` |
+| TelegramUI `0x1891948`–`0x1891c20` | Original block builds font/color and attributed-string dictionaries; display switch is independent of persisted edit history |
+| TelegramUI `0x24f4bbc` | Status renderer also checks the display switch; exact original status layout is not claimed |
+| TelegramCore `0x233aa8`, `0x233b40` → `0x23ec20` | Both spy getters tail-branch to `mov w0, #0; ret`. They are shipped disabled, despite menu/setter symbols |
+| TelegramCore `SGReadDatesStore.record` `0x2110c8`, lookup `0x211204` | Original has a peer-to-Int32 timestamp store. No direct record/lookup consumers were found in the inspected core/UI branch inventories |
 
-The recovered catalog explicitly limits these artifacts to symbols, types and call
-sites rather than original Swift bodies. They support the original feature intent,
-including inline presentation, but do not establish a recoverable archive schema
-or complete media-retention algorithm. The schema and message-history menu action
-here are clean-room integration choices, not claimed binary-identical UI behavior.
+`tests/test_history_original.py` pins the IPA hash and rechecks these instructions
+and online-history schema anchors. Spy behavior below is an evidence-guided client
+extension requested by the user, not a claim that disabled Beta 3.2 getters execute it.
 
-The supplied standalone public checkout at
-`C:\Users\Pisun4ik\AppData\Local\Temp\opencode\wg` was absent during this pass.
-Native API inspection and patch checks used the read-only assembled
-`whitegram-validate-12.9.2` checkout and pristine files read from its pinned Git
-commit. Neither source worktree was patched by the tests.
+## Current implemented behavior
 
-## Implemented behavior
+The earlier document was stale. The current runtime already retains deleted cloud
+messages in Postbox, filters/changes their inline opacity, persists before-edit text
+and entities in native attributes, appends an original-text block, honors own/bot/
+per-chat exclusions, and creates local text copies with collision/account checks.
+These capabilities remain implemented.
 
-### Native navigation and browsing
+This increment adds:
 
-- Long-pressing an ordinary cloud message exposes **Message history** / **История
-  сообщения**. Telegram already puts the clicked album member first; the action
-  uses that message's complete `(peerId, namespace, messageId)` identity and opens
-  its archive after the context menu dismisses.
-- The action is available even after capture is disabled, so previously saved or
-  imported versions remain reachable. An empty history explains the capture limit;
-  opening the menu does not invent or capture an older version.
-- Service messages, secret/local/scheduled messages and embedded-mode menus are
-  excluded by the hook. Telegram's early ad-menu returns retain their own menus.
-- The archive root can browse archived chats, showing captured chat names, stable
-  peer IDs and matching-version counts. Chat selection preserves the current
-  event/search/order filters. A message screen also links to the entire chat archive.
-- Received, before-edit and deleted filters combine with text/chat/author/message-ID/
-  filename search. They are value-based queries shared by display, export and clear.
-- Lists show the original message time and local capture time separately, formatted
-  in the UI locale and local time zone, including seconds. Users can sort newest-first
-  by either time; message-specific views default to capture order.
-- Tapping a record shows its full bounded text, captured author/chat names, local
-  revision number, original timestamp, previous edit timestamp when available and
-  attachment descriptors. Actions copy text, open all versions of the same message,
-  or browse that chat's archive.
-- Export and clear affect **all matching versions**, including pages beyond the
-  current 100-row page. The clear confirmation freezes the query and names the
-  matching count. Import reports the number of newly retained versions.
-- A refresh action retries snapshot/write failures. Errors are displayed rather
-  than replacing an unreadable archive with an empty one.
+- **Exact display-only switch:** `showEditedStrikethrough` defaults on; when off,
+  the appended original block disappears while capture, native edit history and the
+  edited marker continue. The appended original text has single strikethrough;
+  current text is unaffected. Existing preview/invoice/story/updating-media guards
+  and valid UTF-16/custom-emoji handling remain. The old assembled block upgrades
+  once; a drifted strike block is rejected before source writes.
+- **Portable entity archives:** optional `entities` use Telegram Codable keys
+  (`start`, `end`, `_rawValue`, etc.) and exact Int64 values. Captured descriptors
+  include formatting, links, mentions, custom-emoji IDs and formatted dates.
+  Import validates the complete batch, 1024-entity cap, lengths, IDs and UTF-16
+  boundaries, including split-surrogate rejection. Restoration converts every
+  entity batch before its first Postbox mutation and installs native
+  `TextEntitiesMessageAttribute`. Old v1 archives still decode without entities.
+- **Original deleted-text export:** a separate history-screen action produces the
+  recovered nine-field `SGBackedUpMessage` array. Optional author fields are omitted
+  when absent, as with Swift Codable. Full peer namespaces/wide IDs are unpacked;
+  one non-edit observation per message is exported. Truncated text fails rather
+  than becoming a purported complete original backup. Modern export retains richer
+  metadata/entities; original export has precisely the original limited schema.
+- **Unambiguous replay:** conflicting records with the same canonical archive key
+  are rejected before merge; identical duplicates remain idempotent. A late import
+  of revision-zero original text no longer displaces a newer captured revision in
+  restoration selection. Selection prefers revision within a whole message ID,
+  then observation time. Message and optional edit timestamps must be nonnegative.
 
-### Capture and metadata
+Modern history still uses account-directory/account-peer registry keys and
+`whitegram-history-<accountPeerId>-v1.json`, serialized atomic protected writes,
+2000 observations and an 8 MiB cap. Text is bounded to **65536 UTF-8 bytes**, not
+the old documented 8 KiB. Native retained messages/edit attributes are not truncated
+to this archive bound. Attachment descriptors are bounded to 32 per observation.
 
-- Existing received-update, explicit remote-ID/global-ID deletion and interactive
-  local-ID deletion capture sites remain connected. Deletion capture runs before
-  Telegram removes the message/resources.
-- The remote edit and all four local edit-response variants capture the prior
-  version when plain text **or attachment descriptors** change. A same-caption
-  file/photo replacement is therefore retained.
-- Edit capture runs after Telegram computes `updatedMedia`, including its rule to
-  preserve already-unlocked paid content, and before `return .update(...)`. It
-  observes the effective update rather than misclassifying that preservation as a
-  media replacement.
-- File-family metadata includes kind, namespaced media ID, filename, MIME type,
-  declared byte size, dimensions and duration when supplied by Telegram. Photo
-  metadata includes ID and largest known representation dimensions. Link previews,
-  polls and other types get only their supported kind/identifier information.
-- Metadata comparison omits file access references, thumbnails, cache state, poll
-  votes and reactions. Such updates alone are not archived as media edits.
-- Existing enable flags and own/bot capture exclusions continue to gate recording.
-  Captures take no network action and do no filesystem I/O on the Postbox transaction
-  thread. No Postbox message, resource-removal, read-state, PTS or update-return code
-  is suppressed or replaced.
+## Spy consumers
 
-### Persistence, compatibility and isolation
+- `trackLastOnline` stores accepted explicit online/offline contact observations;
+  excludes own IDs, bots, noncontacts, min updates rejected by Telegram, and
+  privacy-coarse status values. Online uses local observation time; offline uses
+  the supplied `wasOnline`. Timestamps are positive, not future, and monotonic.
+  Capture writes are queued off the Postbox transaction thread.
+- Chat titles/profile presence formatting can use this previously received
+  timestamp for a later coarse native presence. Explicit native `.present` values
+  and currently active native `.recently` values always win. The UI uses Telegram's
+  existing localized last-seen formatting.
+  Typing and expiry timers never add timestamps or synthesize online transitions.
+- `saveReadDates` stores successful `messages.getOutboxReadDate` replies under
+  `(account, peer, cloud message ID)` and supplies that exact cached date to native
+  `MessageReadStats`. No extra request or read receipt is introduced. Outbox read
+  watermarks are not stamped onto earlier messages, and group participant dates
+  are not mislabeled as private-message dates.
+- `WhitegramSpy.v1.<accountId>` is bounded to 2000 peers / 2000 exact message read
+  dates / 2 MiB. First observed read date wins. Oldest evidence is evicted with
+  stable identity tie breaks. Corrupt/foreign archives fail closed and remain intact.
 
-- The registry key includes the normalized account directory **and account peer ID**.
-  Each account uses `whitegram-history-<accountPeerId>-v1.json` in its account directory.
-  Accounts with overlapping message IDs or even a reused directory get distinct
-  stores and files.
-- If the account-specific file is absent, a valid owned `whitegram-history-v1.json`
-  is renamed to it after bounded decoding and ownership validation. Another account's
-  legacy file is left for its owner. An existing account-specific file takes precedence.
-- JSON remains version 1 with additive optional fields (`peerTitle`, `authorName`,
-  `editedAt`, `textTruncated`, `media`). Old v1 entries decode with unknown metadata,
-  not fabricated names or attachment details.
-- Capture and import are first-observation-wins for an existing
-  `(peer, namespace, message, event, local revision)` key. Replaying an archive neither
-  rewrites its recorded text/time nor reports duplicate entries as newly added.
-- Both envelope and individual-record account IDs are validated before importing.
-  Namespace, canonical identity/key, timestamps and text/metadata bounds are checked
-  before modifying the store. Invalid/mixed-account imports leave it unchanged.
-- Writes remain serialized, atomic and protected until first device unlock. Snapshot
-  flushes pending captures before returning, and transient write failures can be
-  retried. Removing an account directory does not cause it to be recreated.
-- Limits: 2,000 retained observations, 8 MiB encoded archive, 8 KiB of new text per
-  version, 32 attachment descriptors, 512 UTF-8 bytes per saved name and 256 per MIME
-  type. New text truncation preserves complete UTF-8 scalars; legacy text retains the
-  prior allowance for a replacement character at the boundary. Oldest captures are
-  evicted at the bounds. Received and before-edit observations may contain the same
-  text because event type is part of the identity.
-- Clear/import require a readable archive. A corrupt archive is reported and retained
-  for recovery; normal clearing no longer silently discards a load error. After an
-  external repair of a latched invalid-load error, reopen the account/app.
+The original shared peer-only `wg_readDates_v1` is deliberately not assigned to
+specific messages: it cannot establish a message read date. No original last-online
+storage schema was established in the shipped disabled spy implementation.
 
-## Remaining gaps
+## Meaningful verification
 
-- Deleted bubbles are still removed from the native conversation. Deleted versions
-  are accessible through the chat archive; inline tombstones, opacity and original
-  edited-text rendering have not been ported.
-- No media bytes, thumbnails, resource references or media-cache pins are stored.
-  Descriptors cannot play or restore an attachment, and Telegram's cache cleanup
-  remains active. This is not a full media backup.
-- No cloud-history backfill, Telegram conversation restoration, secret-chat capture,
-  range/whole-history deletion coverage or reconstruction of never-received versions.
-- No rich-text/entity history, poll-option/question history or arbitrary deep media
-  serialization. Per-chat hide preferences evidenced by the original hooks are not
-  implemented by these browsing filters.
-- The archive is a bounded, asynchronous local observation log, not a transactional
-  Postbox backup. Crash-before-write loss and multi-device local-revision collisions
-  are not resolved by first-observation-wins import.
-- UIKit/device behavior and Apple SDK type/link correctness require the parent build.
+Executed on this host (2026-10-23):
 
-## Files and verification
+- History/source/spy suite: **26 passed** with pinned source and no source writes.
+  Three optional original-IPA tests skip under the parser-only environment; they
+  were separately executed with the recovery venv: **3 passed**, hash verified.
+- Online-history/source suite: **6 passed**, including source syntax, replay,
+  accepted-merge preservation and late-anchor failure atomicity.
+- Native Foundation production SwiftPM suite under WSL Swift **6.4**:
+  **51 passed**, zero failures. Includes 21 store, 8 policy, 5 query, 4 spy,
+  10 online-history and 3 preexisting shortening cases.
+- Owned production/tests and patched native sources pass tree-sitter Swift checks;
+  patched sources introduce no additional parser diagnostics.
+- Native `swiftc -frontend -parse` passed for the seven changed Postbox/UI adapters
+  under WSL; their platform-dependent imports are not type-checked by parsing.
+- Scoped `git diff --check` passed.
 
-| Owned file | Role |
-| --- | --- |
-| `history_patches.py` | Exact staged capture/menu patches, legacy-hook upgrade, final inventory validation |
-| `cleanroom/WhitegramHistoryStore.swift` | Serialized Foundation persistence, migration, account isolation, scoped operations |
-| `cleanroom/WhitegramHistoryModels.swift` | Entries, attachment metadata, full message identity, query/sort and UTF-8 bounds |
-| `cleanroom/WhitegramHistoryCapture.swift` | TelegramCore/Postbox capture and metadata adapter |
-| `cleanroom/WhitegramHistoryController.swift` | Root/chat/message archive browsing and import/export/clear |
-| `cleanroom/WhitegramHistoryPresentation.swift` | Localized time/metadata presentation, shared rows and version detail screen |
-| `tests/test_history_patches.py` | Read-only source, idempotence, failure atomicity, API and parser checks |
-| `tests/history/WhitegramHistoryStoreTests.swift` | 14 native persistence/replay/isolation/limit/failure tests |
-| `tests/history/WhitegramHistoryQueryTests.swift` | 5 native scope/search/time-order/UTF-8 tests |
-| `tests/history/run_native.py` | Disposable native test host using unmodified production sources |
-| `HISTORY_PORT.md` | Evidence, scope and parent integration contract |
+Commands from `ios-build-ci`:
 
-Windows checks use
-`C:\Users\Pisun4ik\AppData\Local\Temp\opencode\whitegram-check-env\Scripts\python.exe`.
-The focused checks compare pristine and assembled source, replay without writes,
-reject missing/ambiguous/partly installed hooks before any write, and verify native
-mutation/cleanup code is retained. Swift syntax checks cover all five production
-files, both native test files and the four patched native files against their
-baseline parser diagnostics.
+```powershell
+$env:WHITEGRAM_ASSEMBLED_SOURCE='C:\Users\Pisun4ik\AppData\Local\Temp\opencode\whitegram-source-13.0.0'
+& 'C:\coding\telegram\whitegram\whitegram-check-env\Scripts\python.exe' -B -m unittest discover -s whitegram/tests -p 'test_history*.py' -v
+& 'C:\coding\telegram\whitegram\whitegram-check-env\Scripts\python.exe' -B -m unittest discover -s whitegram/tests -p 'test_online_history.py' -v
+& 'C:\coding\telegram\whitegram\whitegram-rebuild\.venv\Scripts\python.exe' -B -m unittest discover -s whitegram/tests -p 'test_history_original.py' -v
+wsl -d Ubuntu -- python3 /mnt/c/coding/telegram/whitegram/ios-build-ci/whitegram/tests/history/run_native.py --swift /opt/swift/usr/bin/swift --temp-root /tmp
+```
 
-Observed results for this slice:
+## Real remaining limitations
 
-| Check | Result |
-| --- | --- |
-| Focused history source/API/replay/failure-atomicity suite | 15 passed, no skips |
-| Existing `HistoryIntegrationTests` and `MenuIntegrationTests` | 5 passed, no skips |
-| Owned Swift sources and native test sources | 7 parsed, no diagnostics |
-| Patched native Swift sources | 4 checked, no additional parser diagnostics |
-| Scoped `git diff --check` | Passed |
-| Native Foundation runner | Unavailable: Swift missing; exit 2 |
-
-The native runner was invoked and reported that Swift is unavailable. The 19 native
-XCTest cases are supplied but **have not executed on this host**; source/parser
-checks do not establish their runtime assertions or full iOS compilation.
+- Full TelegramCore/UIKit type/link validation and visual/device behavior require
+  the parent's macOS build. Foundation tests do not compile Postbox/UI adapters.
+- JSON contains no media payloads, thumbnails or usable resource backups.
+  Native retained attachments depend on existing Telegram cache lifetime.
+  Custom emoji IDs survive entity conversion, but sticker-pack reference objects
+  are not part of the portable entity subset.
+- Secret chats, never-received/deleted-before-receipt messages and cloud backfill
+  remain unavailable. Restoring an absent message needs a known peer and complete
+  text; local copies preserve identity/formatting without sending anything.
+- Spy persistence is queued and bounded, with crash-before-write loss possible.
+  Read dates are learned when the existing native report request succeeds; they
+  cannot be recovered from hidden/no-date updates. Saved last-seen evidence is
+  historical, and coarse-status fallback can be older than current presence.
+  Title/profile redraw on their normal presence refresh; toggling the preference
+  does not independently force a title/profile redraw in this slice.
+- Multi-device revision reconciliation and a transactional archive/Postbox backup
+  are not implemented. Original unscoped files require explicit destination-account
+  binding. Parent owns logout cleanup and account-scoped preferences.

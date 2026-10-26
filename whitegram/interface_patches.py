@@ -29,7 +29,14 @@ def apply_interface_patches(root: Path) -> dict[str, list[str]]:
     }
 
 '''
-    patches.replace("settings-row-visibility", settings, anchor, before_result + anchor)
+    value = patches.read(settings)
+    strip_marker = "    if WhitegramClientInterfaceSettings.current.accountStrip {\n"
+    if before_result in value and strip_marker in value:
+        if value.count(before_result) != 1 or value.count(strip_marker) != 1 or value.index(before_result) > value.index(strip_marker):
+            raise ValueError("settings-row-visibility: ambiguous account strip/filter order")
+        patches.features.setdefault("settings-row-visibility", set()).add(settings)
+    else:
+        patches.replace("settings-row-visibility", settings, anchor, before_result + anchor)
     phone = "    if case let .user(user) = data.peer {\n        items[.info]!.append(PeerInfoScreenDisclosureItem(id: ItemPhoneNumber,"
     patches.replace("hidePhoneNumber", settings, phone,
         phone.replace("if case let", 'if !WhitegramPreferences.bool("hidePhoneNumber"), case let'))

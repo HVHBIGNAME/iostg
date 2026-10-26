@@ -24,6 +24,8 @@ HISTORY_RUNTIME_FILES = {
         "WhitegramHistoryModels", "WhitegramHistoryStore", "WhitegramHistoryCapture",
         "WhitegramHistoryPolicy", "WhitegramHistoryMessageAttribute", "WhitegramHistoryRuntime",
         "WhitegramHistoryOperations", "WhitegramHistoryLegacyBackup", "WhitegramMessageShortening",
+        "WhitegramHistoryEntities",
+        "WhitegramSpyStore", "WhitegramSpyRuntime",
     )},
     **{name + ".swift": "submodules/SettingsUI/Sources/" + name + ".swift" for name in (
         "WhitegramHistoryController", "WhitegramHistoryPresentation", "WhitegramHistoryNativeController",
@@ -219,6 +221,11 @@ def _chat_presentation_patches(patches: SourcePatches):
         patches.replace("showEditedOriginalText", TEXT,
             "if case let .CustomEmoji(_, fileId) = entity.type, let range = validatedEntityRange(entity.range, in: originalText) {",
             "if case let .CustomEmoji(_, fileId) = entity.type, WhitegramTranslationTextRules.validRange(entity.range, in: originalText.string) {\n                            let range = NSRange(location: entity.range.lowerBound, length: entity.range.count)")
+    # Upgrade exactly the old appended block before installing its display switch.
+    old_original = "                    let combined = NSMutableAttributedString(attributedString: attributedText)\n"
+    struck_original = "                    originalText.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: NSRange(location: 0, length: originalText.length))\n" + old_original
+    if "WhitegramHistoryRuntime.originalForDisplay(" in patches.read(TEXT) and struck_original not in patches.read(TEXT):
+        patches.replace("showEditedStrikethrough", TEXT, old_original, struck_original)
     anchor = "                var customTruncationToken: ((UIFont, Bool) -> NSAttributedString?)?\n"
     patches.replace("showEditedOriginalText", TEXT, anchor, '''                var whitegramCanShowOriginal = !item.presentationData.isPreview && item.attributes.updatingMedia == nil && invoice == nil && story == nil && !isUnsupportedMedia
                 if let subject = item.associatedData.subject, case .messageOptions = subject { whitegramCanShowOriginal = false }
@@ -233,6 +240,7 @@ def _chat_presentation_patches(patches: SourcePatches):
                             originalText.addAttribute(ChatTextInputAttributes.customEmoji, value: ChatTextInputTextCustomEmojiAttribute(interactivelySelectedFromPackId: nil, fileId: fileId, file: item.message.associatedMedia[EngineMedia.Id(namespace: Namespaces.Media.CloudFile, id: fileId)] as? TelegramMediaFile), range: range)
                         }
                     }
+                    originalText.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: NSRange(location: 0, length: originalText.length))
                     let combined = NSMutableAttributedString(attributedString: attributedText)
                     let heading = item.presentationData.strings.baseLanguageCode.hasPrefix("ru") ? "Исходный текст:" : "Original text:"
                     combined.append(NSAttributedString(string: "\\n\\n" + heading + "\\n", font: originalFont, textColor: originalColor))
@@ -241,6 +249,7 @@ def _chat_presentation_patches(patches: SourcePatches):
                 }
 
 ''' + anchor)
+    patches.replace("showEditedStrikethrough", TEXT, old_original, struck_original)
 
 
 def _message_menu_patch(patches: SourcePatches):

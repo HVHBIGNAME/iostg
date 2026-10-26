@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "ipa_sha256": "5cf287812de7707dd21256281e645c29a9a5c0da3f66910746254842fce5ffbf",
+  "authority": "static shipped bytes; conclusions are analyst interpretations, not runtime observations",
+  "images": {
+    "ui": {
+      "member": "Payload/Telegram.app/Frameworks/TelegramUIFramework.framework/TelegramUIFramework",
+      "sha256": "7f64950144cc75631ceb9cc9365cd4d802d583e5315ee63498829a1c72cb3ac3",
+      "functions": [
+        {"start": "0x10f0f98", "end": "0x10f25d0", "sha256": "081247c807e385253fe93f742085a7af8ce5217c9b41a603ba24e8b4a9b5e56d", "meaning": "settings state reads all three presentation flags"},
+        {"start": "0x1105184", "end": "0x1105a90", "sha256": "89905ac1c5d7f153ec973c263ec4c8fc7191a58a560ac68aa0c657bf23291116", "meaning": "settings refresh reads appBadgeColorIsBlack into state +0x12b"},
+        {"start": "0x1839048", "end": "0x1839364", "sha256": "d6c9cbc30e9f131ba5c2af00f8e898ceaf4a4891a61bd32aca1ab58342432988", "meaning": "incoming style gate precedes media eligibility, per-user/chat style lookup and prefetch; outgoing uses ownStyle"},
+        {"start": "0x1eb6c88", "end": "0x1eb7164", "sha256": "113a1fc7fcede984a03e61a2ca6d4bf2d8766f36697e0877655fe5b1908e4645", "meaning": "hide badge path removes current layer; cached/fetched badge uses hasGrantedBadge"},
+        {"start": "0x1100304", "end": "0x110073c", "sha256": "3a662cba6a1b19a5c1ee8b147f40b642123cb969fce927bd0870d308a6e518cd", "meaning": "presents WGBadgePickerController(selectedName: SGSettings.appBadgeName)"},
+        {"start": "0x110073c", "end": "0x11008c8", "sha256": "1e74d9ae58d4e4a30a61e406de20616b4baf5c4921460ee0842b373bc31126d6", "meaning": "picker completion writes appBadgeName"},
+        {"start": "0x8c36c", "end": "0x8ca00", "sha256": "73864d245d05dc953d773b5f17cf9a18d19a143c903d27374e49919a8dce3e1c", "meaning": "resolves appBadgeName then Components/ image and setImage"},
+        {"start": "0x572a1c", "end": "0x5731c8", "sha256": "acc3a2fae89c7c7512a7ebde2e0afcad6974c9653bdd273ff70b09fb373745ca", "meaning": "root navigation setup resolves appBadgeName and assigns image"}
+      ],
+      "calls": {
+        "0x10f1474": "appBadgeColorIsBlackSbvgZ", "0x11057f0": "appBadgeColorIsBlackSbvgZ",
+        "0x1839080": "hideOthersCustomMessageStyleSbvgZ", "0x184f520": "hideWhitegramUserBadgeSbvgZ",
+        "0x185da98": "hideWhitegramUserBadgeSbvgZ", "0x1a4dee4": "hideWhitegramUserBadgeSbvgZ",
+        "0x1a4e598": "hideWhitegramUserBadgeSbvgZ", "0x1eac21c": "hideWhitegramUserBadgeSbvgZ",
+        "0x1eb6cb8": "hideWhitegramUserBadgeSbvgZ", "0x1100334": "appBadgeNameSSvgZ",
+        "0x110077c": "appBadgeNameSSvsZ", "0x8c768": "appBadgeNameSSvgZ", "0x572eac": "appBadgeNameSSvgZ"
+      },
+      "bytes": {"0x54e7e08": "0000000000c08240"},
+      "cache_note": "The 0x1eb6c88 badge fetch call loads a 600-second maxAge; the port's 30-second refresh is a local implementation choice."
+    },
+    "core": {
+      "member": "Payload/Telegram.app/Frameworks/TelegramCoreFramework.framework/TelegramCoreFramework",
+      "sha256": "9908ba0fcf3782f6f7da9a3b4f82b941cc95c952ba1b631cb33451747e96e198",
+      "functions": [
+        {"start": "0x2b68e4", "end": "0x2b6988", "sha256": "7b9799b23da38cdf9cb6bf6099820821f5f27403f3a7434794428db70a990dea", "meaning": "explicit granted Bool wins; otherwise nonempty role except beta_tester or nonempty badge/verification text; enabled is not read"}
+      ],
+      "bytes": {"0x214ee4": "c0035fd6", "0x214e9c": "00008052c0035fd6"},
+      "calls": {}
+    }
+  },
+  "scan": {
+    "arm64_images": 72,
+    "scope": "B/BL references to imported/exported presentation settings and scammer symbols across the supplied IPA",
+    "negative": "No direct appBadgeColorIsBlack renderer call beyond the two settings-state readers; no direct UI scammer-symbol call. Inlining and indirect references are outside this scan."
+  },
+  "unresolved": [
+    "The style resolver's early exclusion bit in W3 is observed, but its source-level identity is not recovered; the policy deliberately names it excluded, not preview.",
+    "WGMessageStyleManager and its style delivery/cache are absent from the assembled source. The recovered incoming-only gate is not registered as an implemented renderer capability.",
+    "No signed scammer snapshot verifier exists in the inspected assembled source; existing whitegramScammerAssessment reads legacy comma-separated saved IDs.",
+    "Only WGBadgeBlack/White loose images were recovered here. The original primary and other badge variants are in catalog resources and need separate extraction.",
+    "The original badge particle/icon rendering is approximated by a measured inline star glyph in the staged consumers; no pixel parity claim."
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "artifact": "Whitegram Beta 3.2 (13.0) [tg@heypaintech].ipa",
+  "member": "Payload/Telegram.app/Frameworks/TelegramUIFramework.framework/TelegramUIFramework",
+  "member_sha256": "7f64950144cc75631ceb9cc9365cd4d802d583e5315ee63498829a1c72cb3ac3",
+  "provider": "Offline wgtool.binary.MachO / Capstone, probe_original.py",
+  "execution": "not executed",
+  "source_pin": "f1dd7a2dbd02cbbf513e75d5695d8d36d1cf5838",
+  "strings": [
+    {"address": "0x5969410", "text": "Buttons in horizontal rows scale up in the centre and shrink at the edges while scrolling."},
+    {"address": "0x59697b0", "text": "Fills the profile background with the person's personal colour: their NFT gift status, Premium profile colour, or a Whitegram colour."},
+    {"address": "0x5969920", "text": "Blurs the background around the avatar while it is expanded."},
+    {"address": "0x5969a70", "text": "Uses a blurred copy of the person's avatar as the profile background."},
+    {"address": "0x5969e00", "text": "Uses a blurred copy of the current track's cover art as the player background."},
+    {"address": "0x596a6c0", "text": "Picks animated particles (snow, stars and so on) that fall over the interface."}
+  ],
+  "functions": [
+    {
+      "start": "0x92828c", "end_exclusive": "0x9291e8",
+      "observed": [
+        "Calls avatarBlurInProfile and profileColorEffectEnabled getters",
+        "0x928794 calls AvatarNode.unroundedImage getter",
+        "0x928ba0 calls avatarBlurReduced getter before effectWithStyle:/initWithEffect:",
+        "0x928cac calls avatarBlurTintEnabled getter before blackColor/colorWithAlphaComponent: and overlay insertion"
+      ],
+      "unknown": ["Complete optimized caller identity and all branches", "Exact native material/style/transition values", "Metal avatar mesh rendering"]
+    },
+    {
+      "start": "0x83f1dc", "end_exclusive": "0x83f440",
+      "observed": [
+        "0x83f208 calls wgBubbleFisheyeEffect getter",
+        "Uses horizontal content offset plus half bounds width as viewport center",
+        "0x83f2f4..0x83f304 computes max(0.45, 1 - abs(itemMidX - center) / 76 * 0.2)",
+        "Calls CGAffineTransformMakeScale; disabled path writes identity transform"
+      ],
+      "unknown": ["Exact original horizontal-row class identity; current port targets profile media tabs"]
+    },
+    {
+      "start": "0x18befc4", "end_exclusive": "0x18bf474",
+      "symbol": "_$s19ChatMessageItemView21WGChatScrollAnimationO5apply2to6offsetySo13ASDisplayNodeC_12CoreGraphics7CGFloatVtFZ",
+      "observed": [
+        "0x18bf018 calls chatScrollAnimation getter; 0x18bf020 calls UIAccessibilityIsReduceMotionEnabled",
+        "Translation combines clamped offset * -0.66 (+/-20) and offset * -0.16 (+/-4)",
+        "Scale is 1 - min(abs(displacement) * 0.0011, 0.022)",
+        "Calls CATransform3DTranslate and CATransform3DScale; native animation cleanup and spring setup present"
+      ],
+      "unknown": ["Exact original call-site offset accumulation and spring timing integration"]
+    },
+    {
+      "start": "0x5c159c", "end_exclusive": "0x5c1c38",
+      "symbol": "_$s10TelegramUI22wgBuildParticleEmitter4sizeSo14CAEmitterLayerCSgSo6CGSizeV_tF",
+      "observed": [
+        "Reads particleEffect, particleSpeed and particleDensity",
+        "Rejects effect < 1, low power and a battery-level threshold",
+        "Index 1 selects snow; other positive values select leaves; attempts whitegramsnow.png or whitegramleaves.png",
+        "Snow birth rate 10 * density; leaves birth rate 7 * density",
+        "Speed table [0.45, 1, 2.2]; density table floats [0.45, 1, 2]",
+        "UIAccessibilityIsReduceMotionEnabled divides native birth rate by three",
+        "0x52214 removes prior layer and calls builder only for mode 0",
+        "0x2474ac removes prior layer and calls builder only for mode 1"
+      ],
+      "unknown": ["Complete native trajectories and seed distribution", "Exact battery threshold not decoded", "All original window placements"]
+    },
+    {
+      "start": "0x896ef0", "end_exclusive": "0x8988dc",
+      "observed": ["0x898404 loads WGGlow.gradientImage", "0x898454..0x8984ac sets layer contents/gravity/masks and initial zero opacity"],
+      "unknown": ["This does not establish the complete avatarGlowEnabled getter-to-renderer path", "Original glow color extraction and extent"]
+    },
+    {
+      "start": "0x4d2634", "end_exclusive": "0x4d26b0",
+      "observed": ["0x4d2684 calls albumArtBlurEnabled getter", "Other bounded direct callers: 0x4d2e30, 0x4d44f8, 0x5d6df4"],
+      "unknown": ["Exact original image material, compositing opacity and cover fetch pipeline"]
+    }
+  ],
+  "constants": [
+    {"address": "0x554b6e0", "type": "f64le", "bytes": "1f85eb51b81ee5bf", "value": -0.66},
+    {"address": "0x554b6e8", "type": "f64le", "bytes": "7b14ae47e17ac4bf", "value": -0.16},
+    {"address": "0x554b6f0", "type": "f64le", "bytes": "2f6ea301bc05523f", "value": 0.0011},
+    {"address": "0x554b6f8", "type": "f64le", "bytes": "ba490c022b87963f", "value": 0.022},
+    {"address": "0x54e5058", "type": "f64le", "bytes": "9a9999999999c93f", "value": 0.2},
+    {"address": "0x54e9e40", "type": "f64le", "bytes": "cdccccccccccdc3f", "value": 0.45},
+    {"address": "0x6b5acc0", "type": "f64le", "bytes": "cdccccccccccdc3f", "value": 0.45},
+    {"address": "0x6b5acc8", "type": "f64le", "bytes": "000000000000f03f", "value": 1.0},
+    {"address": "0x6b5acd0", "type": "f64le", "bytes": "9a99999999990140", "value": 2.2},
+    {"address": "0x6b5ad00", "type": "f32le", "bytes": "6666e63e", "value": 0.45},
+    {"address": "0x6b5ad04", "type": "f32le", "bytes": "0000803f", "value": 1.0},
+    {"address": "0x6b5ad08", "type": "f32le", "bytes": "00000040", "value": 2.0}
+  ]
+}

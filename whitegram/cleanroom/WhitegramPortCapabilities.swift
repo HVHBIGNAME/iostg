@@ -12,6 +12,18 @@ enum WhitegramPortCapabilities {
     // Each writable key has an installed consumer in runtime_patches,
     // interface_patches, history_patches, or WhitegramForkBridge.
     static let booleans: [String: String] = [
+        "unlimitedPinnedChats": "unlimitedPinnedChats",
+        "showPostsFeed": "showPostsFeed", "classicInterface": "classicInterface",
+        "avatarBlurEffect": "avatarBlurEffect", "avatarBlurInProfile": "avatarBlurInProfile",
+        "avatarBlurReduced": "avatarBlurReduced", "avatarBlurTint": "avatarBlurTint", "avatarGlow": "avatarGlow",
+        "profileColorEffect": "profileColorEffect", "albumArtBlur": "albumArtBlur",
+        "chatScrollAnimation": "chatScrollAnimation", "wgBubbleFisheyeEffect": "wgBubbleFisheyeEffect",
+        "separateProfileTab": "separateProfileTab", "hideBottomTabBar": "hideBottomTabBar", "videoBackgroundInProfile": "videoBackgroundInProfile",
+        "hideSettingsReorderAccounts": "hideSettingsReorderAccounts", "trackLastOnline": "trackLastOnline", "saveReadDates": "saveReadDates",
+        "hideWhitegramUserBadge": "hideWhitegramUserBadge", "scammerProtection": "scammerProtection",
+        "newChatListUI": "newChatListUI", "newChatHeaderStyle": "newChatHeaderStyle", "oledMode": "oledMode",
+        "reactionButtonGlow": "reactionButtonGlow", "roundProfileButtons": "roundProfileButtons", "localPremium": "localPremium",
+        "deferredMessages": "deferredMessages", "chooseCameraBeforeRoundVideo": "chooseCameraBeforeRoundVideo",
         "showRAMUsage": "showRAMUsage",
         "whitegramNotifications": "whitegramNotificationsEnabled",
         "persistentNotifications": "persistentNotificationsEnabled", "backgroundKeepAlive": "backgroundKeepAlive",
@@ -83,6 +95,8 @@ enum WhitegramPortCapabilities {
     ]
 
     static let informationKeys: [String: String] = [
+        "hideChannelAdsInfo": "s.hideChannelAds.desc", "hideWhitegramUserBadgeInfo": "s.hideWhitegramUserBadge.desc",
+        "hideOthersCustomMessageStyleInfo": "s.hideOthersCustomMsgStyle.desc", "iconsInfo": "icons.info",
         "persistentNotificationsInfo": "info.persistentNotifications",
         "showDeletedInfo": "di.showDeleted", "showEditedInfo": "di.showEdited", "cacheInfo": "di.cache",
         "appearanceInfo": "di.appearance", "cameraInfo": "di.camera", "interfaceInfo": "di.interface",
@@ -93,6 +107,9 @@ enum WhitegramPortCapabilities {
     ]
 
     static let titleKeys: [String: String] = [
+        "appBadgeColorIsBlack": "s.appBadgeColor", "hideWhitegramUserBadge": "s.hideWhitegramUserBadge",
+        "hideOthersCustomMessageStyle": "s.hideOthersCustomMsgStyle", "iconPackSitePreview": "s.createIconPack",
+        "accountSettings": "accountSettings.title",
         "messagesHeader": "h.messages", "cacheHeader": "h.cache", "appearanceHeader": "h.appearance",
         "cameraHeader": "h.camera", "interfaceHeader": "h.interface", "infoDisplayHeader": "h.info",
         "tabsHeader": "h.tabs", "miscUIHeader": "h.misc", "bubblesHeader": "h.bubbles", "liquidGlassHeader": "h.liquidGlass",
@@ -131,6 +148,13 @@ enum WhitegramPortCapabilities {
     ]
 
     static let screens: [String: String] = [
+        "profileCoverPhoto": "navigationCover", "resetProfileCoverPhoto": "navigationResetCover",
+        "videoChatBackground": "navigationVideo", "resetVideoBackground": "navigationResetVideo",
+        "chatListPreview": "navigationChatPreview", "tabBarPreview": "navigationTabPreview",
+        "appBadgeColorIsBlack": "remainingPresentation", "iconPackSitePreview": "remainingPresentation",
+        "particleEffectPicker": "visualParticles", "particleModePicker": "visualParticles",
+        "fakeDeviceName": "deviceSettings",
+        "accountSettings": "accountSettings",
         "analyticsStaticRow": "diagnostics", "exportSystemLogs": "diagnostics",
         "autoFormatStyleButton": "textFormatting",
         "visualUsernameButton": "visualUsername",
@@ -194,7 +218,7 @@ enum WhitegramPortCapabilities {
         "showTimestampSeconds": "Секунды во времени сообщения", "showFullViewCount": "Полное число просмотров",
         "customFontEnabled": "Использовать выбранный шрифт", "hidePhoneNumber": "Скрыть номер в редактировании профиля",
         "hideContactsTab": "Скрыть вкладку контактов", "hideCallsTab": "Скрыть вкладку звонков",
-        "hideTabLabels": "Скрыть подписи вкладок", "hideBottomTabBar": "Компактное меню вместо панели вкладок",
+        "hideTabLabels": "Скрыть подписи вкладок", "hideBottomTabBar": "Скрыть нижний таббар",
         "hideChannelAds": "Скрыть рекламу в каналах", "disableAds": "Скрыть спонсируемые сообщения и поиск",
         "hideStories": "Скрыть истории", "hideGalleryCamera": "Скрыть камеру в галерее",
         "translateMessages": "Автоматический перевод", "forceDeviceMicrophone": "Микрофон устройства",

@@ -119,6 +119,7 @@ final class WhitegramAccountActions: NSObject, UIDocumentPickerDelegate {
         if id == "cancel" { cancel(); return }
         guard !busy else { return }
         switch id {
+        case "accountSettings": controller?.navigationController?.pushViewController(whitegramAccountSettingsController(context: context), animated: true)
         case "keychainAccounts": controller?.navigationController?.pushViewController(whitegramKeychainAccountsController(context: context), animated: true)
         case "accountTransfer": controller?.navigationController?.pushViewController(whitegramAccountTransferController(context: context), animated: true)
         case "botAccounts": controller?.navigationController?.pushViewController(whitegramBotAccountsController(context: context), animated: true)

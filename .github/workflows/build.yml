@@ -31,7 +31,7 @@ jobs:
           - source_version: release-13.0.0
             source_revision: f1dd7a2dbd02cbbf513e75d5695d8d36d1cf5838
             app_version: "13.0"
-            app_build: "34651"
+            app_build: "34652"
 
     steps:
       - name: Checkout build repository
@@ -107,7 +107,7 @@ jobs:
           "$python" -B -m unittest discover -s whitegram/tests -p 'test_*.py' -v
           "$python" -B -m unittest discover -s whitegram/tests/voice -p 'test_*.py' -v
           "$python" -B -m unittest discover -s whitegram/tests/player -p 'test_*.py' -v
-          node --test whitegram/tests/plugins/bootstrap.test.cjs whitegram/tests/plugins/hooks.test.cjs
+          node --test whitegram/tests/plugins/bootstrap.test.cjs whitegram/tests/plugins/hooks.test.cjs whitegram/tests/plugins/services.test.cjs
           "$python" -B whitegram/tests/plugins/check_swift_syntax.py
           "$python" -B whitegram/tests/plugins/check_hook_patches.py /Users/Shared/telegram-ios
           "$python" -B whitegram/tests/services/check_sources.py --target /Users/Shared/telegram-ios
@@ -124,6 +124,7 @@ jobs:
           python3 -B whitegram/tests/plugins/run_native.py || failed=1
           python3 -B whitegram/tests/history/run_native.py || failed=1
           python3 -B whitegram/tests/settings_transfer/run_native.py --assembled-source /Users/Shared/telegram-ios || failed=1
+          python3 -B whitegram/tests/settings_transfer/run_account_checks.py --scratch-parent "$RUNNER_TEMP" || failed=1
           python3 -B whitegram/tests/translation/run_native.py || failed=1
           python3 -B whitegram/tests/localization/run_native.py || failed=1
           python3 -B whitegram/tests/privacy/run_native.py || failed=1

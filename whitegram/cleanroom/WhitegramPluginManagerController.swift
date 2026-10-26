@@ -487,7 +487,7 @@ public func whitegramPluginManagerController(context: AccountContext) -> ViewCon
     arguments.importer = importer
     let controller = whitegramPluginListController(context: context, title: "Whitegram Plugins", manager: manager, arguments: arguments, entries: {
         var entries: [WhitegramPluginEntry] = [
-            WhitegramPluginEntry(stableId: "info", index: 0, section: 0, content: .text("Import a .js script, a ZIP .plugin/.wgplugin/.zip package, or a JSON package. Inspect its source and permissions before running. Enable Start Automatically in its detail screen to run it when this account opens.")),
+            WhitegramPluginEntry(stableId: "info", index: 0, section: 0, content: .text("Import a .js/.cjs script, a ZIP .plugin/.wgplugin/.zip package, or a JSON package. TypeScript entries require a bundled compiler. Inspect its source and permissions before running. Enable Start Automatically in its detail screen to run it when this account opens.")),
             WhitegramPluginEntry(stableId: "import", index: 1, section: 1, content: .action("Import Plugin…", false)),
             WhitegramPluginEntry(stableId: "stopAll", index: 2, section: 1, content: .action("Stop All Plugins", false)),
             WhitegramPluginEntry(stableId: "installed", index: 3, section: 2, content: .header("INSTALLED PLUGINS"))

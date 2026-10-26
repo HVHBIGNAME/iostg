@@ -199,8 +199,8 @@ struct WhitegramPluginPackage {
             _ = try WhitegramPluginPath.components(entry)
         } else {
             // Image 55, 0xc5c93c–0xc5ca50: named entries, then first script.
-            let candidates = ["main.js", "plugin.js", "index.js", name + ".js", "main.ts", "index.ts"]
-            guard let main = candidates.first(where: { files[$0] != nil }) ?? files.keys.sorted().first(where: { ["js", "ts"].contains(URL(fileURLWithPath: $0).pathExtension.lowercased()) }) else {
+            let candidates = ["main.js", "plugin.js", "index.js", name + ".js", "main.cjs", "index.cjs", "main.ts", "index.ts", "main.tsx", "index.tsx"]
+            guard let main = candidates.first(where: { files[$0] != nil }) ?? files.keys.sorted().first(where: { ["js", "cjs", "ts", "tsx"].contains(URL(fileURLWithPath: $0).pathExtension.lowercased()) }) else {
                 throw WhitegramPluginError("ENTRY_MISSING", "Package has no JavaScript or TypeScript entry")
             }
             entry = main

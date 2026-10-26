@@ -72,11 +72,15 @@ private enum WhitegramPluginAPI {
         add(["runtime.info", "runtime.started", "runtime.failed", "permissions.check", "log", "timer.create", "timer.clear", "events.setSubscriptions"], exposed: false)
         add(["interceptors.add", "interceptors.remove"], exposed: false)
         add(["package.resolveModule", "package.list", "package.read"], permission: "storage", exposed: false)
+        add(["language.transpileTypeScript"], exposed: false)
         add(["storage.get", "storage.set", "storage.remove", "storage.keys", "storage.clear"], permission: "storage")
         add(["fs.list", "fs.read", "fs.readBase64", "fs.readBytes", "fs.write", "fs.writeBase64", "fs.writeBytes", "fs.exists", "fs.remove"], permission: "storage")
         add(["preferences.get", "preferences.set", "preferences.values"], permission: "settings")
         add(["clipboard.get", "clipboard.set"], permission: "clipboard")
         add(["capabilities.info"])
+        add(["services.provide", "services.unprovide", "services.resolve"], exposed: false)
+        add(["services.list"])
+        add(["services.call"], sync: false)
         add(["ui.createSurface", "ui.updateSurface", "ui.setSurfaceOptions", "ui.setSurfaceVisible", "ui.closeSurface", "ui.surfaceInfo", "ui.pushScreen", "ui.toast"], permission: "uiMutation", exposed: false)
         add(["ui.registerSettingsPage", "ui.addSettingsRow"], permission: "uiMutation", exposed: false)
         add(["ui.addMenuItem"], permission: "uiMutation", exposed: false)
@@ -117,7 +121,9 @@ final class WhitegramPluginRuntime {
     private var networkSubscription: WhitegramPluginEventSubscription?
     private var interceptions: [String: WhitegramPluginInterceptToken] = [:]
     private var menuRegistrations: [String: WhitegramPluginMenuRegistration] = [:]
+    private var serviceRegistrations: [String: WhitegramPluginServiceRegistration] = [:]
     private var js: JSContext?
+    private var typeScript: WhitegramPluginTypeScript?
     private var bootstrapReady = false
     private var didStart = false
     private var stopQueued = false
@@ -273,8 +279,11 @@ final class WhitegramPluginRuntime {
                 }
                 try self.evaluate("__wgInstallNativeCompatibility();", name: "install-compatibility.js")
                 try self.evaluate(self.resource("whitegram-sdk-bridge"), name: "whitegram-sdk-bridge.js")
-                guard let data = try self.files?.packageFile(self.record.entry), let source = String(data: data, encoding: .utf8) else {
+                guard let data = try self.files?.packageFile(self.record.entry), var source = String(data: data, encoding: .utf8) else {
                     throw WhitegramPluginError("ENTRY_MISSING", "Plugin entry is missing or is not UTF-8")
+                }
+                if ["ts", "tsx"].contains(URL(fileURLWithPath: self.record.entry).pathExtension.lowercased()) {
+                    source = try self.transpileTypeScript(source, filename: self.record.entry)
                 }
                 let deadline = DispatchWorkItem { [weak self] in self?.fail("Plugin onLoad did not finish within 30 seconds") }
                 self.startupDeadline = deadline
@@ -384,8 +393,10 @@ final class WhitegramPluginRuntime {
         for token in self.interceptions.values { token.dispose() }
         self.interceptions.removeAll()
         self.menuRegistrations.removeAll()
+        self.serviceRegistrations.removeAll()
         self.js?.exceptionHandler = nil
         self.js = nil
+        self.typeScript = nil
         self.bootstrapReady = false
         self.files = nil
         self.unloading = false
@@ -437,7 +448,8 @@ final class WhitegramPluginRuntime {
                 "events": WhitegramPluginHooks.eventNames + WhitegramPluginNativeInterception.eventNames, "eventSemantics": "observational-postbox",
                 "interceptors": ["message.beforeSend": ["cancel", "modify", "modifyFinal", "replace"], "tg.request": ["cancel"]],
                 "interceptorSemantics": "synchronous-results-async-native-handoff", "deferredInterceptors": false,
-                "features": ["javascript": true, "http": true, "localHistory": true, "peerWatches": true, "nativeSurfaces": true,
+                "features": ["javascript": true, "http": true, "localHistory": true, "peerWatches": true, "nativeSurfaces": true, "services": true,
+                             "overlays": true, "zstack": true, "webViews": true, "typescript": WhitegramPluginTypeScript.isInstalled,
                              "globalTelegramEvents": true, "pluginSettingsPages": true, "currentChat": true,
                              "globalTelegramHooks": true, "tabs": false, "interceptors": true, "languageWorkers": false, "rawMTProto": false]]
     }
@@ -446,6 +458,7 @@ final class WhitegramPluginRuntime {
         switch path {
         case "runtime.info": return ["id": self.record.id, "name": self.record.name, "version": self.record.version, "entry": self.record.entry,
                                      "automaticStart": self.automaticStart,
+                                     "languages": WhitegramPluginTypeScript.isInstalled ? ["typescript"] : [String](),
                                      "packageId": self.record.packageId as Any? ?? NSNull(),
                                      "manifest": WhitegramPluginAPI.entries.map { $0.json },
                                      "events": WhitegramPluginHooks.eventNames + WhitegramPluginNativeInterception.eventNames,
@@ -461,6 +474,41 @@ final class WhitegramPluginRuntime {
             return NSNull()
         case "permissions.check": return self.granted(try whitegramPluginString(arguments, 0))
         case "capabilities.info": return self.capabilities()
+        case "language.transpileTypeScript": return try self.transpileTypeScript(whitegramPluginString(arguments, 0), filename: whitegramPluginString(arguments, 1))
+        case "services.provide":
+            guard arguments.count == 3, let context = self.accountContext else { throw WhitegramPluginError("INVALID_ARGUMENT", "Expected service name, version and handler") }
+            let name = try whitegramPluginString(arguments, 0)
+            let version = try whitegramPluginString(arguments, 1)
+            let handler = try whitegramPluginString(arguments, 2)
+            guard !handler.isEmpty, handler.utf8.count <= 128, self.serviceRegistrations[name] != nil || self.serviceRegistrations.count < 32 else {
+                throw WhitegramPluginError("QUOTA_EXCEEDED", "Invalid handler or more than 32 provided services")
+            }
+            do {
+                let registration = try WhitegramPluginServices.shared.register(scope: context.account.postbox, owner: self.record.id,
+                    name: name, version: version, queue: self.queue, permitted: { [weak self] in self?.lifetime.isActive == true },
+                    invoke: { [weak self] method, arguments, token, consumer in
+                        self?.callJS("__wgNativeServiceCall", [handler, method, arguments, token, consumer])
+                    })
+                self.serviceRegistrations[name]?.dispose()
+                self.serviceRegistrations[name] = registration
+                self.lifetime.add("service:" + name, cancel: { registration.dispose() })
+            } catch let error as WhitegramPluginServiceError { throw WhitegramPluginError(error.code, error.message) }
+            return handler
+        case "services.unprovide":
+            let name = try whitegramPluginString(arguments, 0)
+            self.serviceRegistrations.removeValue(forKey: name)?.dispose()
+            self.lifetime.remove("service:" + name)
+            return true
+        case "services.list":
+            guard let context = self.accountContext else { throw WhitegramPluginError("ACCOUNT_UNAVAILABLE", "Account is unavailable") }
+            return WhitegramPluginServices.shared.list(scope: context.account.postbox)
+        case "services.resolve":
+            guard arguments.count == 2, let response = arguments[1] as? [String: Any], let context = self.accountContext else {
+                throw WhitegramPluginError("INVALID_ARGUMENT", "Expected service token and response")
+            }
+            do { return try WhitegramPluginServices.shared.resolve(scope: context.account.postbox, owner: self.record.id,
+                token: whitegramPluginString(arguments, 0), response: response) }
+            catch let error as WhitegramPluginServiceError { throw WhitegramPluginError(error.code, error.message) }
         case "events.setSubscriptions":
             let allowed = Set(WhitegramPluginHooks.eventNames + WhitegramPluginNativeInterception.eventNames)
             guard arguments.count == 1, let names = arguments[0] as? [String], Set(names).isSubset(of: allowed),
@@ -556,6 +604,12 @@ final class WhitegramPluginRuntime {
         return files
     }
 
+    private func transpileTypeScript(_ source: String, filename: String) throws -> String {
+        if self.typeScript == nil { self.typeScript = try WhitegramPluginTypeScript() }
+        guard let compiler = self.typeScript else { throw WhitegramPluginError("COMPILER_ERROR", "Compiler is unavailable") }
+        return try compiler.transpile(source, filename: filename)
+    }
+
     private func addInterceptor(_ arguments: [Any]) throws -> Bool {
         guard arguments.count == 4, let options = arguments[2] as? [String: Any], let context = self.accountContext else {
             throw WhitegramPluginError("INVALID_ARGUMENT", "Expected interceptor ID, name, options and legacy flag")
@@ -634,6 +688,11 @@ final class WhitegramPluginRuntime {
     private func prepareImages(_ value: Any, depth: Int = 0) throws -> Any {
         guard depth <= 24 else { throw WhitegramPluginError("QUOTA_EXCEEDED", "UI tree is too deep") }
         guard var node = value as? [String: Any] else { return value }
+        if node["type"] as? String == "web" {
+            var props = (node["props"] as? [String: Any]) ?? [:]
+            props["__webNetwork"] = self.granted("network")
+            node["props"] = props
+        }
         if node["type"] as? String == "image", var props = node["props"] as? [String: Any], let source = props["src"] as? String {
             let bytes: Data
             if source.hasPrefix("data:image/"), let comma = source.firstIndex(of: ","), source[..<comma].hasSuffix(";base64"), let data = Data(base64Encoded: String(source[source.index(after: comma)...])) {
@@ -681,6 +740,21 @@ final class WhitegramPluginRuntime {
                     }
                     catch { complete(.failure(WhitegramPluginError.wrap(error))) }
                 }
+            } else if path == "services.call" {
+                guard arguments.count == 3, let values = arguments[2] as? [Any], let context = self.accountContext else {
+                    throw WhitegramPluginError("INVALID_ARGUMENT", "Expected service name, method and argument array")
+                }
+                do {
+                    let call = try WhitegramPluginServices.shared.call(scope: context.account.postbox, consumer: self.record.id,
+                        name: whitegramPluginString(arguments, 0), method: whitegramPluginString(arguments, 1), arguments: values,
+                        permitted: isActive, completion: { result in
+                            switch result {
+                            case let .success(value): complete(.success(value))
+                            case let .failure(error): complete(.failure(WhitegramPluginError(error.code, error.message)))
+                            }
+                        })
+                    disposable.set(ActionDisposable { call.dispose() })
+                } catch let error as WhitegramPluginServiceError { throw WhitegramPluginError(error.code, error.message) }
             } else if path == "tg.watchMessages" {
                 try self.startWatch(arguments, token: token, isActive: isActive, complete: complete)
             } else {

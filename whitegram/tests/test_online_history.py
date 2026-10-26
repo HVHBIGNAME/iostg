@@ -76,7 +76,8 @@ class OnlineHistoryPatchTests(unittest.TestCase):
         for guard in ("guard enabled", "peerId != accountPeerId", "Namespaces.Peer.CloudUser", "transaction.isPeerContact(peerId: peerId)"):
             self.assertIn(guard, capture)
         self.assertIn("case .userStatusOnline: isOnline = true", capture)
-        self.assertIn("case .userStatusOffline: isOnline = false", capture)
+        self.assertIn("case let .userStatusOffline(data): isOnline = false", capture)
+        self.assertIn("serverTimestamp = Double(data.wasOnline)", capture)
         self.assertIn("default: continue", capture)
         self.assertIn("Date().timeIntervalSince1970", capture)
         self.assertNotIn("Timer", capture)

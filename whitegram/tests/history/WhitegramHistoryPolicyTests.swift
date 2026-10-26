@@ -29,6 +29,17 @@ final class WhitegramHistoryPolicyTests: XCTestCase {
         for event in WhitegramHistoryEvent.allCases { XCTAssertTrue(history.captures(event, peerId: 200, own: false, bot: false)) }
     }
 
+    func testBeta32DisplaySwitchDefaultsOnAndDoesNotDisableEditCapture() {
+        XCTAssertTrue(WhitegramHistoryPolicy(values: [:]).showEditedStrikethrough)
+        let policy = WhitegramHistoryPolicy(values: ["showEditedOriginalText": true, "showEditedStrikethrough": false])
+        XCTAssertFalse(policy.showEditedStrikethrough)
+        XCTAssertTrue(policy.showEdited)
+        XCTAssertTrue(policy.captures(.edited, peerId: 200, own: false, bot: false))
+        for value: Any in [1, "true"] {
+            XCTAssertFalse(WhitegramHistoryPolicy(values: ["showEditedStrikethrough": value]).showEditedStrikethrough)
+        }
+    }
+
     func testOwnAndBotFiltersAreIndependentForEditsAndDeletes() {
         let policy = WhitegramHistoryPolicy(values: ["showDeletedMessages": true, "showEditedOriginalText": true, "hideMyDeletedMessages": true, "hideBotEditedMessages": true])
         XCTAssertFalse(policy.captures(.deleted, peerId: 200, own: true, bot: false))
@@ -77,6 +88,8 @@ final class WhitegramHistoryPolicyTests: XCTestCase {
         let all = whitegramHistoryRestorationEntries(records, scope: .account)
         XCTAssertEqual(Set(all.map(\.messageIdentity)), Set([deleted.messageIdentity, otherPeer.messageIdentity]))
         XCTAssertEqual(whitegramHistoryRestorationEntries(records, scope: .message(otherPeer.messageIdentity)), [otherPeer])
+        let lateImport = entry("200", 7, 0, .deleted, 900, "old original backup imported today")
+        XCTAssertEqual(whitegramHistoryRestorationEntries(records + [lateImport], scope: .peer("200")), [deleted])
     }
 
     func testLegacyPeerPackingPreservesNamespaceAndWideId() throws {

@@ -13,6 +13,8 @@ final class WhitegramSettingsTransferStoreTests: XCTestCase {
         ownedKeys.formUnion(WhitegramSettingsArchiveMirrors.bindings.map { $0.store })
         ownedKeys.formUnion(WhitegramSettingsArchiveSchema.rules.keys.map { "wg_" + $0 })
         ownedKeys.insert("wg_activeWhitegramAccountId")
+        ownedKeys.insert(WhitegramPreferences.accountProfilesKey)
+        ownedKeys.insert("wg_separateAccountSettings.v1")
         for key in ownedKeys {
             if let value = UserDefaults.standard.object(forKey: key) { saved[key] = value }
             UserDefaults.standard.removeObject(forKey: key)

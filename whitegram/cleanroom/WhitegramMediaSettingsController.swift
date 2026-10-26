@@ -157,6 +157,7 @@ private func whitegramMediaEntries(_ data: PresentationData, error: String?) -> 
     let cameraNames = [localized("s.cameraFront"), localized("s.cameraBack"), text("Ask", "Спрашивать", "Запитувати")]
     add("videoMessageCamera", 2, .choice(text("Video-message Camera", "Камера видеосообщений", "Камера відеоповідомлень"), cameraNames.indices.contains(camera) ? cameraNames[camera] : "Telegram", true))
     add("rememberLastCamera", 2, .toggle(localized("s.rememberCamera"), settings.rememberLastCamera, true))
+    add("chooseCameraBeforeRoundVideo", 2, .toggle(localized("s.chooseCameraBeforeRoundVideo"), settings.chooseCameraBeforeRoundVideo, true))
     add("staticZoomEnabled", 2, .toggle(localized("s.staticZoom"), settings.staticZoomEnabled, true))
     add("useTelegramCameraSettings", 2, .toggle(localized("camera.settings.stock"), settings.useTelegramCameraSettings, true))
     for front in [false, true] {

@@ -16,6 +16,8 @@ PLUGIN_HOOK_RUNTIME_FILES = {
     "WhitegramPluginNativeInterception.swift": "submodules/TelegramCore/Sources/WhitegramPluginNativeInterception.swift",
     "WhitegramPluginArchive.swift": "submodules/SettingsUI/Sources/Whitegram/WhitegramPluginArchive.swift",
     "WhitegramPluginContributions.swift": "submodules/TelegramCore/Sources/WhitegramPluginContributions.swift",
+    "WhitegramPluginServices.swift": "submodules/TelegramCore/Sources/WhitegramPluginServices.swift",
+    "WhitegramPluginTypeScript.swift": "submodules/SettingsUI/Sources/Whitegram/WhitegramPluginTypeScript.swift",
 }
 
 

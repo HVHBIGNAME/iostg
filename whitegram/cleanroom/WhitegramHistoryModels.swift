@@ -127,12 +127,13 @@ public struct WhitegramHistoryEntry: Codable, Equatable {
     public let media: [WhitegramHistoryMedia]?
     public let threadId: String?
     public let groupingKey: String?
+    public let entities: [WhitegramHistoryEntity]?
 
     public var messageIdentity: WhitegramHistoryMessageId {
         return WhitegramHistoryMessageId(peerId: self.peerId, namespace: self.namespace, id: self.messageId)
     }
 
-    public init(accountId: String, peerId: String, namespace: Int32, messageId: Int32, revision: UInt32, messageDate: Int32, capturedAt: Double, event: WhitegramHistoryEvent, text: String, authorId: String?, outgoing: Bool, mediaCount: Int, peerTitle: String? = nil, authorName: String? = nil, editedAt: Int32? = nil, textTruncated: Bool? = nil, media: [WhitegramHistoryMedia]? = nil, threadId: String? = nil, groupingKey: String? = nil) {
+    public init(accountId: String, peerId: String, namespace: Int32, messageId: Int32, revision: UInt32, messageDate: Int32, capturedAt: Double, event: WhitegramHistoryEvent, text: String, authorId: String?, outgoing: Bool, mediaCount: Int, peerTitle: String? = nil, authorName: String? = nil, editedAt: Int32? = nil, textTruncated: Bool? = nil, media: [WhitegramHistoryMedia]? = nil, threadId: String? = nil, groupingKey: String? = nil, entities: [WhitegramHistoryEntity]? = nil) {
         self.key = "\(peerId):\(namespace):\(messageId):\(event.rawValue):\(revision)"
         self.accountId = accountId
         self.peerId = peerId
@@ -153,6 +154,7 @@ public struct WhitegramHistoryEntry: Codable, Equatable {
         self.media = media
         self.threadId = threadId
         self.groupingKey = groupingKey
+        self.entities = entities
     }
 }
 

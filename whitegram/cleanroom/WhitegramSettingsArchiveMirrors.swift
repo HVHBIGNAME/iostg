@@ -75,12 +75,16 @@ enum WhitegramSettingsArchiveMirrors {
         return items
     }()
 
-    private static func readGroup(_ store: String, defaults: UserDefaults) throws -> [String: Any] {
+    static var profileMirrorKeys: Set<String> {
+        return Set(bindings.map { $0.store }).union(WhitegramSettingsArchiveSchema.rules.keys.filter { !$0.hasPrefix("public.") }.map { "wg_" + $0 })
+    }
+
+    private static func readGroup(_ store: String, storedValues: [String: Any]) throws -> [String: Any] {
         var result: [String: Any] = [:]
         for binding in bindings where binding.store == store {
             if let field = binding.field { result[field] = binding.initial }
         }
-        if let object = defaults.object(forKey: store) {
+        if let object = storedValues[store] {
             guard let data = object as? Data, data.count <= WhitegramSettingsArchive.maximumBytes else { throw WhitegramSettingsArchiveError.invalidPublicStore }
             do {
                 guard let existing = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw WhitegramSettingsArchiveError.invalidPublicStore }
@@ -130,19 +134,19 @@ enum WhitegramSettingsArchiveMirrors {
         }
     }
 
-    static func capture(preferences: [String: Any], defaults: UserDefaults) throws -> [String: Any] {
+    static func capture(preferences: [String: Any], storedValues: [String: Any]) throws -> [String: Any] {
         var result = preferences
         for key in WhitegramSettingsArchiveSchema.rules.keys where !key.hasPrefix("public.") && result[key] == nil {
-            result[key] = defaults.object(forKey: "wg_" + key)
+            result[key] = storedValues["wg_" + key]
         }
         var groups: [String: [String: Any]] = [:]
         for binding in bindings {
             if result[binding.key] != nil && !binding.key.hasPrefix("public.") { continue }
             let stored: Any
             if let field = binding.field {
-                if groups[binding.store] == nil { groups[binding.store] = try readGroup(binding.store, defaults: defaults) }
+                if groups[binding.store] == nil { groups[binding.store] = try readGroup(binding.store, storedValues: storedValues) }
                 stored = groups[binding.store]?[field] ?? binding.initial
-            } else { stored = defaults.object(forKey: binding.store) ?? binding.initial }
+            } else { stored = storedValues[binding.store] ?? binding.initial }
             result[binding.key] = try fromStored(stored, binding: binding)
         }
         if let edit = result["doubleTapEditEnabled"] as? Bool {
@@ -153,7 +157,7 @@ enum WhitegramSettingsArchiveMirrors {
         return result
     }
 
-    static func prepare(_ values: [String: Any], defaults: UserDefaults) throws -> (changes: [String: Any], mirrors: [String: Any], notifications: [Notification.Name]) {
+    static func prepare(_ values: [String: Any], storedValues: [String: Any]) throws -> (changes: [String: Any], mirrors: [String: Any], notifications: [Notification.Name]) {
         var changes = values.filter { !$0.key.hasPrefix("public.") }
         let languages = ["ru", "uk", "en"]
         if let code = values["menuLanguageCode"] as? String,
@@ -171,12 +175,12 @@ enum WhitegramSettingsArchiveMirrors {
         for binding in bindings {
             guard let value = values[binding.key] else { continue }
             if let field = binding.field {
-                if groups[binding.store] == nil { groups[binding.store] = try readGroup(binding.store, defaults: defaults) }
+                if groups[binding.store] == nil { groups[binding.store] = try readGroup(binding.store, storedValues: storedValues) }
                 let previous = groups[binding.store]?[field] ?? binding.initial
                 groups[binding.store]?[field] = try toStored(value, previous: previous, binding: binding)
                 if let name = notifications[binding.store] { names.insert(Notification.Name(name)) }
             } else {
-                mirrors[binding.store] = try toStored(value, previous: defaults.object(forKey: binding.store) ?? binding.initial, binding: binding)
+                mirrors[binding.store] = try toStored(value, previous: storedValues[binding.store] ?? binding.initial, binding: binding)
                 names.insert(Notification.Name("WhiteGramChatSettingsUpdated"))
             }
         }

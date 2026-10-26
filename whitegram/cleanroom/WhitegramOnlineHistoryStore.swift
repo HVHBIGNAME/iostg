@@ -8,20 +8,23 @@ public struct WhitegramOnlineHistoryEntry: Codable, Equatable {
     public let isOnline: Bool
     public let isContact: Bool
     public let timestamp: Double
+    public let serverTimestamp: Double?
 
-    init(peerId: Int64, peerName: String, peerUsername: String?, isOnline: Bool, timestamp: Double) {
+    init(peerId: Int64, peerName: String, peerUsername: String?, isOnline: Bool, timestamp: Double, serverTimestamp: Double? = nil, isContact: Bool = true) {
         self.id = UUID()
         self.peerId = peerId
         self.peerName = String(peerName.prefix(256))
         self.peerUsername = peerUsername.map { String($0.prefix(64)) }
         self.isOnline = isOnline
-        self.isContact = true
+        self.isContact = isContact
         self.timestamp = timestamp
+        self.serverTimestamp = serverTimestamp
     }
 
     var isValid: Bool {
-        return peerId > 0 && isContact && timestamp.isFinite && timestamp >= 0
+        return peerId > 0 && whitegramHistoryValidPeer(String(peerId)) && ((UInt64(peerId) >> 32) & 7) == 0 && timestamp.isFinite && timestamp >= 0
             && timestamp <= Date.distantFuture.timeIntervalSince1970
+            && (serverTimestamp.map { $0.isFinite && $0 >= 0 && $0 <= Date.distantFuture.timeIntervalSince1970 } ?? true)
             && peerName.count <= 256 && (peerUsername?.count ?? 0) <= 64
             && peerName.utf8.count <= 2048 && (peerUsername?.utf8.count ?? 0) <= 256
     }
@@ -150,5 +153,58 @@ public final class WhitegramOnlineHistoryStore: NSObject {
             let result = Result { try self.save([]) }
             DispatchQueue.main.async { completion(result) }
         }
+    }
+
+    /// Original v2 is shared and has no account field. The caller must explicitly
+    /// bind it to this account; the original bytes remain available for recovery.
+    public func migrateOriginalForThisAccount(completion: @escaping (Result<Int, Error>) -> Void) {
+        queue.async {
+            let result = Result { () -> Int in
+                guard let object = self.defaults.object(forKey: "wg_onlineHistory_v2") else { return 0 }
+                guard let data = object as? Data, data.count <= Self.maximumBytes else { throw WhitegramOnlineHistoryError.invalidArchive }
+                let original = try JSONDecoder().decode([WhitegramOnlineHistoryLegacyEntry].self, from: data)
+                guard original.count <= Self.maximumEntries,
+                      original.allSatisfy({ $0.peerName.count <= 256 && $0.peerName.utf8.count <= 2048 && ($0.peerUsername?.count ?? 0) <= 64 && ($0.peerUsername?.utf8.count ?? 0) <= 256 }) else { throw WhitegramOnlineHistoryError.invalidArchive }
+                let incoming = original.map { $0.entry }
+                guard incoming.allSatisfy({ $0.isValid && $0.peerId != self.accountId }) else { throw WhitegramOnlineHistoryError.invalidArchive }
+                var entries = try self.load()
+                let previousIds = Set(entries.map(\.id))
+                for entry in incoming {
+                    if entries.contains(where: { $0.sameObservation(as: entry) }) { continue }
+                    entries.append(entry)
+                }
+                entries.sort { $0.timestamp < $1.timestamp }
+                if entries.count > Self.maximumEntries { entries.removeFirst(entries.count - Self.maximumEntries) }
+                let added = entries.filter { !previousIds.contains($0.id) }.count
+                if added > 0 { try self.save(entries) }
+                return added
+            }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+}
+
+// Beta 3.2 SGOnlineHistoryEntry.decode at 0x21162c; isContact is additive,
+// serverTimestamp and peerUsername use decodeIfPresent. No UUID/account envelope.
+private struct WhitegramOnlineHistoryLegacyEntry: Decodable {
+    let peerId: Int64
+    let peerName: String
+    let peerUsername: String?
+    let isOnline: Bool
+    let timestamp: Double
+    let serverTimestamp: Double?
+    let isContact: Bool?
+
+    var entry: WhitegramOnlineHistoryEntry {
+        return WhitegramOnlineHistoryEntry(peerId: peerId, peerName: peerName, peerUsername: peerUsername,
+            isOnline: isOnline, timestamp: timestamp, serverTimestamp: serverTimestamp, isContact: isContact ?? false)
+    }
+}
+
+private extension WhitegramOnlineHistoryEntry {
+    func sameObservation(as other: WhitegramOnlineHistoryEntry) -> Bool {
+        return peerId == other.peerId && peerName == other.peerName && peerUsername == other.peerUsername
+            && isOnline == other.isOnline && isContact == other.isContact
+            && timestamp == other.timestamp && serverTimestamp == other.serverTimestamp
     }
 }

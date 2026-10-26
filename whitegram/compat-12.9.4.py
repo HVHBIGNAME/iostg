@@ -5,53 +5,114 @@ import subprocess
 import sys
 from pathlib import Path
 
-from runtime_patches import apply_runtime_patches
-from appearance_patches import APPEARANCE_RUNTIME_FILES, apply_appearance_patches
-from appearance_parity_patches import APPEARANCE_PARITY_RUNTIME_FILES, apply_appearance_parity_patches
-from appearance_icon_pack_patches import APPEARANCE_ICON_PACK_RUNTIME_FILES, apply_appearance_icon_pack_patches
-from appearance_glass_patches import APPEARANCE_GLASS_RUNTIME_FILES, apply_appearance_glass_patches
-from appearance_extension_patches import apply_appearance_extensions
+from account_patches import (
+    ACCOUNTS_REQUIRED_DEPENDENCIES,
+    ACCOUNTS_RUNTIME_FILES,
+    apply_account_patches,
+)
+from account_settings_patches import (
+    ACCOUNT_SETTINGS_RUNTIME_FILES,
+    apply_account_settings_patches,
+    apply_client_settings_patches,
+)
 from appearance_details_patches import apply_appearance_details_patches
-from public_api_adaptations import apply_public_api_adaptations
-from voice_patches import VOICE_RUNTIME_FILES, VOICE_REQUIRED_DEPENDENCIES, apply_voice_patches
-from player_patches import PLAYER_RUNTIME_FILES, apply_player_patches
-from plugin_resources import install_plugin_resources
-from interface_patches import apply_interface_patches
+from appearance_extension_patches import apply_appearance_extensions
+from appearance_glass_patches import (
+    APPEARANCE_GLASS_RUNTIME_FILES,
+    apply_appearance_glass_patches,
+)
+from appearance_icon_pack_patches import (
+    APPEARANCE_ICON_PACK_RUNTIME_FILES,
+    apply_appearance_icon_pack_patches,
+)
+from appearance_parity_patches import (
+    APPEARANCE_PARITY_RUNTIME_FILES,
+    apply_appearance_parity_patches,
+)
+from appearance_patches import APPEARANCE_RUNTIME_FILES, apply_appearance_patches
+from backend_patches import BACKEND_RUNTIME_FILES, apply_backend_patches
+from branding_patches import apply_branding_patches, install_intro_logo
+from build_patches import add_dep, apply_build_patches
+from chat_list_visibility_patches import apply_chat_list_visibility_patches
+from client_completion_patches import (
+    apply_client_completion_patches,
+    prepare_client_completion_patches,
+)
+from client_device_patches import DEVICE_RUNTIME_FILES
+from client_interface_patches import CLIENT_INTERFACE_RUNTIME_FILES
+from contact_visibility_patches import apply_contact_visibility_patches
+from content_control_patches import PRIVACY_RUNTIME_FILES, apply_content_control_patches
+from diagnostics_patches import DIAGNOSTICS_RUNTIME_FILES, apply_diagnostics_patches
+from feed_classic_patches import RUNTIME_FILES as FEED_CLASSIC_RUNTIME_FILES
+from feedback_patches import apply_feedback_patches
+from formatting_toolbar_patches import (
+    FORMATTING_TOOLBAR_RUNTIME_FILES,
+    apply_formatting_toolbar_patches,
+)
 from history_patches import HISTORY_RUNTIME_FILES, apply_history_patches
-from online_history_patches import ONLINE_HISTORY_RUNTIME_FILES, apply_online_history_patches
-from plugin_hook_patches import PLUGIN_HOOK_RUNTIME_FILES, apply_plugin_hook_patches
-from translation_patches import TRANSLATION_RUNTIME_FILES, apply_translation_patches
-from service_patches import SERVICES_RUNTIME_FILES, apply_service_patches
+from interface_patches import apply_interface_patches
+from launcher_icon_patches import (
+    apply_launcher_icon_patches,
+    install_launcher_icon_resources,
+)
+from local_pins_patches import RUNTIME_FILES as LOCAL_PINS_RUNTIME_FILES
+from media_accent_patches import MEDIA_ACCENT_RUNTIME_FILES, apply_media_accent_patches
 from media_camera_patches import MEDIA_RUNTIME_FILES, apply_media_camera_patches
 from message_actions_patches import apply_message_action_patches
-from account_patches import ACCOUNTS_RUNTIME_FILES, ACCOUNTS_REQUIRED_DEPENDENCIES, apply_account_patches
-from content_control_patches import PRIVACY_RUNTIME_FILES, apply_content_control_patches
-from transfer_patches import TRANSFER_RUNTIME_FILES, apply_transfer_patches
-from backend_patches import BACKEND_RUNTIME_FILES, apply_backend_patches
-from traffic_patches import TRAFFIC_RUNTIME_FILES, apply_traffic_patches
-from system_patches import SYSTEM_RUNTIME_FILES, apply_system_patches
-from sticker_patches import STICKER_RUNTIME_FILES, apply_sticker_patches
-from shortening_patches import apply_shortening_patches
-from chat_list_visibility_patches import apply_chat_list_visibility_patches
-from contact_visibility_patches import apply_contact_visibility_patches
-from media_accent_patches import MEDIA_ACCENT_RUNTIME_FILES, apply_media_accent_patches
-from diagnostics_patches import DIAGNOSTICS_RUNTIME_FILES, apply_diagnostics_patches
-from profile_appearance_patches import PROFILE_APPEARANCE_RUNTIME_FILES, apply_profile_appearance_patches
-from profile_metadata_patches import PROFILE_METADATA_RUNTIME_FILES, apply_profile_metadata_patches
-from online_indicator_patches import ONLINE_INDICATOR_RUNTIME_FILES, apply_online_indicator_patches
-from text_processing_patches import TEXT_PROCESSING_RUNTIME_FILES, apply_text_processing_patches
-from formatting_toolbar_patches import FORMATTING_TOOLBAR_RUNTIME_FILES, apply_formatting_toolbar_patches
-from return_key_patches import apply_return_key_patches
-from feedback_patches import apply_feedback_patches
-from settings_icon_patches import SETTINGS_ICON_RUNTIME_FILES, apply_settings_icon_patches, install_settings_icon_resources
-from launcher_icon_patches import apply_launcher_icon_patches, install_launcher_icon_resources
-from swift_syntax_patches import apply_swift_syntax_patches
-from build_patches import add_dep, apply_build_patches
+from navigation_patches import REQUIRED_DEPENDENCIES as NAVIGATION_REQUIRED_DEPENDENCIES
+from navigation_patches import RUNTIME_FILES as NAVIGATION_RUNTIME_FILES
 from network_patches import NETWORK_RUNTIME_FILES, apply_network_patches
-from session_patches import RUNTIME_FILES as SESSION_RUNTIME_FILES, apply_session_patches
+from online_history_patches import (
+    ONLINE_HISTORY_RUNTIME_FILES,
+    apply_online_history_patches,
+)
+from online_indicator_patches import (
+    ONLINE_INDICATOR_RUNTIME_FILES,
+    apply_online_indicator_patches,
+)
+from player_patches import PLAYER_RUNTIME_FILES, apply_player_patches
+from plugin_hook_patches import PLUGIN_HOOK_RUNTIME_FILES, apply_plugin_hook_patches
+from plugin_resources import install_plugin_resources
+from profile_appearance_patches import (
+    PROFILE_APPEARANCE_RUNTIME_FILES,
+    apply_profile_appearance_patches,
+)
+from profile_metadata_patches import (
+    PROFILE_METADATA_RUNTIME_FILES,
+    apply_profile_metadata_patches,
+)
+from public_api_adaptations import apply_public_api_adaptations
+from remaining_presentation_patches import RESOURCE_FILES as REMAINING_RESOURCE_FILES
+from remaining_presentation_patches import RUNTIME_FILES as REMAINING_RUNTIME_FILES
+from return_key_patches import apply_return_key_patches
+from runtime_patches import apply_runtime_patches
+from service_patches import SERVICES_RUNTIME_FILES, apply_service_patches
+from session_patches import RUNTIME_FILES as SESSION_RUNTIME_FILES
+from session_patches import apply_session_patches
 from settings_api_patches import apply_settings_api_patches
-from branding_patches import apply_branding_patches, install_intro_logo
+from settings_icon_patches import (
+    SETTINGS_ICON_RUNTIME_FILES,
+    apply_settings_icon_patches,
+    install_settings_icon_resources,
+)
+from shortening_patches import apply_shortening_patches
+from sticker_patches import STICKER_RUNTIME_FILES, apply_sticker_patches
+from swift_syntax_patches import apply_swift_syntax_patches
+from system_patches import SYSTEM_RUNTIME_FILES, apply_system_patches
 from telegram_13_api_patches import apply_telegram_13_api_patches
+from text_processing_patches import (
+    TEXT_PROCESSING_RUNTIME_FILES,
+    apply_text_processing_patches,
+)
+from traffic_patches import TRAFFIC_RUNTIME_FILES, apply_traffic_patches
+from transfer_patches import TRANSFER_RUNTIME_FILES, apply_transfer_patches
+from translation_patches import TRANSLATION_RUNTIME_FILES, apply_translation_patches
+from visual_effects_patches import RUNTIME_FILES as VISUAL_RUNTIME_FILES
+from voice_patches import (
+    VOICE_REQUIRED_DEPENDENCIES,
+    VOICE_RUNTIME_FILES,
+    apply_voice_patches,
+)
 
 source_root = Path(sys.argv[1]).resolve()
 public_root = Path(sys.argv[2]).resolve()
@@ -192,9 +253,12 @@ cleanroom_files.update({"cleanroom/" + name: destination for name, destination i
 for manifest in (
     APPEARANCE_RUNTIME_FILES, APPEARANCE_PARITY_RUNTIME_FILES, APPEARANCE_ICON_PACK_RUNTIME_FILES,
     APPEARANCE_GLASS_RUNTIME_FILES, HISTORY_RUNTIME_FILES, ONLINE_HISTORY_RUNTIME_FILES, ACCOUNTS_RUNTIME_FILES,
-    PRIVACY_RUNTIME_FILES, TRANSFER_RUNTIME_FILES, PLAYER_RUNTIME_FILES, BACKEND_RUNTIME_FILES, TRAFFIC_RUNTIME_FILES,
+    PRIVACY_RUNTIME_FILES, TRANSFER_RUNTIME_FILES, PLAYER_RUNTIME_FILES, BACKEND_RUNTIME_FILES, TRAFFIC_RUNTIME_FILES, ACCOUNT_SETTINGS_RUNTIME_FILES,
     SYSTEM_RUNTIME_FILES, STICKER_RUNTIME_FILES, ONLINE_INDICATOR_RUNTIME_FILES, TEXT_PROCESSING_RUNTIME_FILES, FORMATTING_TOOLBAR_RUNTIME_FILES, MEDIA_ACCENT_RUNTIME_FILES, DIAGNOSTICS_RUNTIME_FILES,
     PROFILE_APPEARANCE_RUNTIME_FILES, PROFILE_METADATA_RUNTIME_FILES, SETTINGS_ICON_RUNTIME_FILES, NETWORK_RUNTIME_FILES, SESSION_RUNTIME_FILES,
+    CLIENT_INTERFACE_RUNTIME_FILES, DEVICE_RUNTIME_FILES,
+    LOCAL_PINS_RUNTIME_FILES, NAVIGATION_RUNTIME_FILES, REMAINING_RUNTIME_FILES, VISUAL_RUNTIME_FILES,
+    FEED_CLASSIC_RUNTIME_FILES,
 ):
     cleanroom_files.update({"cleanroom/" + name: destination for name, destination in manifest.items()})
 for name in (
@@ -237,15 +301,18 @@ for target_name in cleanroom_files.values():
     for existing in target.parent.iterdir():
         if existing.name.lower() == lowered and existing.name != target.name:
             raise SystemExit(
-                "Case-insensitive collision: {} would overwrite {}".format(
-                    target_name, existing.name
-                )
+                f"Case-insensitive collision: {target_name} would overwrite {existing.name}"
             )
 for source_name, target_name in cleanroom_files.items():
     source_path = source_base / source_name
     target_path = source_root / target_name
     target_path.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source_path, target_path)
+
+for source_name, target_name in REMAINING_RESOURCE_FILES.items():
+    target_path = source_root / target_name
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source_base / source_name, target_path)
 
 if add_dep(source_root / "submodules/SettingsUI/BUILD", "//submodules/Camera:Camera"):
     build_count += 1
@@ -266,9 +333,7 @@ def patch_file(relative_path, anchor, replacement):
     found = text.count(anchor)
     if found != 1:
         raise SystemExit(
-            "Patch anchor matched {} times in {}: {!r}".format(
-                found, relative_path, anchor[:80]
-            )
+            f"Patch anchor matched {found} times in {relative_path}: {anchor[:80]!r}"
         )
     path.write_bytes(text.replace(anchor, replacement).encode("utf-8"))
     print("  patched: " + relative_path)
@@ -276,6 +341,7 @@ def patch_file(relative_path, anchor, replacement):
 
 patched_sources = set(cleanroom_files.values()) | set(changed)
 for patcher in (
+    prepare_client_completion_patches,
     apply_runtime_patches, apply_build_patches, apply_public_api_adaptations,
     apply_appearance_patches, apply_interface_patches, apply_history_patches, apply_online_history_patches,
     apply_account_patches, apply_plugin_hook_patches, apply_appearance_extensions,
@@ -289,8 +355,8 @@ for patcher in (
     apply_profile_appearance_patches, apply_appearance_details_patches, apply_profile_metadata_patches, apply_feedback_patches,
     apply_settings_icon_patches, apply_launcher_icon_patches, apply_network_patches,
     apply_settings_api_patches,
-    apply_branding_patches, apply_session_patches,
-    apply_telegram_13_api_patches,
+    apply_branding_patches, apply_session_patches, apply_account_settings_patches,
+    apply_telegram_13_api_patches, apply_client_settings_patches, apply_client_completion_patches,
 ):
     report = patcher(source_root)
     if isinstance(report, dict):
@@ -309,10 +375,11 @@ for relative in sorted(patched_sources):
         label = modules[module]
         if label[2:].split(":", 1)[0] != package and add_dep(build, label):
             build_count += 1
-for relative, dependencies in ACCOUNTS_REQUIRED_DEPENDENCIES.items():
-    for label in dependencies:
-        if add_dep(source_root / relative, label):
-            build_count += 1
+for required_dependencies in (ACCOUNTS_REQUIRED_DEPENDENCIES, NAVIGATION_REQUIRED_DEPENDENCIES):
+    for relative, dependencies in required_dependencies.items():
+        for label in dependencies:
+            if add_dep(source_root / relative, label):
+                build_count += 1
 for module, dependencies in VOICE_REQUIRED_DEPENDENCIES.items():
     for label in dependencies:
         if add_dep(source_root / "submodules" / module / "BUILD", label):

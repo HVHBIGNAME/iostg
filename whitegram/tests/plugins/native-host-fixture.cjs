@@ -60,6 +60,9 @@ class NativeHostFixture {
     this.interceptors = new Map();
     this.settingsItems = new Map();
     this.currentChat = options.currentChat || null;
+    this.pluginId = options.id || "fixture-plugin";
+    this.scope = options.scope || "fixture-account";
+    this.serviceHub = options.serviceHub || new ServiceHubFixture();
     this.package = new Map(Object.entries(options.files || { "main.js": "" }));
     this.data = options.data || new Map();
     this.storage = options.storage || Object.create(null);
@@ -106,7 +109,7 @@ class NativeHostFixture {
 
   sync(name, args) {
     switch (name) {
-      case "runtime.info": return { id: "fixture-plugin", name: "Fixture", version: "1.0", entry: "main.js", manifest: this.manifest, events: nativeEvents, requestEvents };
+      case "runtime.info": return { id: this.pluginId, name: "Fixture", version: "1.0", entry: "main.js", manifest: this.manifest, events: nativeEvents, requestEvents };
       case "runtime.started": this.state = "running"; return true;
       case "runtime.failed": this.state = "failed"; this.logs.push({ level: "error", text: args[0] }); return null;
       case "permissions.check": return this.grants[args[0]] === true;
@@ -129,6 +132,10 @@ class NativeHostFixture {
         this.interceptors.set(id, { name, options, legacy }); return true;
       }
       case "interceptors.remove": return this.interceptors.delete(args[0]);
+      case "services.provide": return this.serviceHub.provide(this, args);
+      case "services.unprovide": return this.serviceHub.unprovide(this, args[0]);
+      case "services.list": return this.serviceHub.list(this);
+      case "services.resolve": return this.serviceHub.resolve(this, args[0], args[1]);
       case "log": this.logs.push({ level: args[0], text: args[1] }); return null;
       case "timer.create": this.timers.set(args[0], { delay: args[1], repeats: args[2] }); return args[0];
       case "timer.clear": this.timers.delete(args[0]); return null;
@@ -155,7 +162,7 @@ class NativeHostFixture {
         return item.id;
       }
       case "ui.createSurface": {
-        if (!["window", "sheet", "screen"].includes(args[0])) fail("UNSUPPORTED_UI", args[0]);
+        if (!["window", "sheet", "screen", "overlay"].includes(args[0])) fail("UNSUPPORTED_UI", args[0]);
         this.validateTree(args[2]);
         if (this.surfaces.size >= 8) fail("QUOTA_EXCEEDED", "Surfaces");
         const id = "surface" + (++this.surfaceSequence);
@@ -202,11 +209,43 @@ class NativeHostFixture {
       else { contained(part); parts.push(part); }
     }
     const key = parts.join("/");
-    for (const candidate of [key, key + ".js", key + ".json", key + "/index.js", key + "/index.json"]) {
-      if (!this.package.has(candidate)) continue;
-      const kind = path.posix.extname(candidate).slice(1);
-      if (!["js", "json"].includes(kind)) fail("UNSUPPORTED_LANGUAGE", kind);
-      return { path: candidate, dir: candidate.split("/").slice(0, -1).join("/"), kind, source: this.package.get(candidate) };
+    const visited = new Set();
+    const module = candidate => {
+      const extension = path.posix.extname(candidate).slice(1);
+      if (!["js", "cjs", "json"].includes(extension)) fail("UNSUPPORTED_LANGUAGE", extension);
+      return { path: candidate, dir: candidate.split("/").slice(0, -1).join("/"), kind: extension === "cjs" ? "js" : extension, source: this.package.get(candidate) };
+    };
+    const resolve = key => {
+      if (visited.has(key) || visited.size >= 32) fail("INVALID_PACKAGE", "Cyclic module main");
+      visited.add(key);
+      for (const candidate of [key, key + ".js", key + ".cjs", key + ".json"]) {
+        if (this.package.has(candidate)) return module(candidate);
+      }
+      if (this.package.has(key + "/package.json")) {
+        const metadata = JSON.parse(this.package.get(key + "/package.json"));
+        if (metadata.main !== undefined) {
+          if (typeof metadata.main !== "string") fail("INVALID_PACKAGE", "Invalid module main");
+          const target = path.posix.normalize(key + "/" + metadata.main);
+          if (!target.startsWith(key + "/")) fail("INVALID_PATH", "Module main escapes its directory");
+          const result = resolve(target);
+          if (result) return result;
+        }
+      }
+      for (const candidate of [key + "/index.js", key + "/index.cjs", key + "/index.json"]) {
+        if (this.package.has(candidate)) return module(candidate);
+      }
+      return null;
+    };
+    const local = resolve(key);
+    if (local) return local;
+    if (!name.startsWith(".")) {
+      const parts = directory ? directory.split("/") : [];
+      for (;;) {
+        const candidate = (parts.length ? parts.join("/") + "/" : "") + "node_modules/" + name;
+        if (!visited.has(candidate)) { const result = resolve(candidate); if (result) return result; }
+        if (!parts.length) break;
+        parts.pop();
+      }
     }
     fail("MODULE_NOT_FOUND", name);
   }
@@ -229,7 +268,7 @@ class NativeHostFixture {
 
   validateTree(tree) {
     if (tree == null) return;
-    if (["web", "zstack", "imaginary"].includes(tree.type)) fail("UNSUPPORTED_UI", tree.type);
+    if (tree.type === "imaginary") fail("UNSUPPORTED_UI", tree.type);
     for (const child of tree.children || []) this.validateTree(child);
   }
   surface(id) { if (!this.surfaces.has(id)) fail("SURFACE_NOT_FOUND", id); return this.surfaces.get(id); }
@@ -237,8 +276,11 @@ class NativeHostFixture {
   hostAsync(name, json, token) {
     const args = JSON.parse(json);
     this.calls.push({ name, args, token });
-    try { this.validate(name, false); this.pending.set(token, { name, args }); }
-    catch (error) { queueMicrotask(() => this.context.__wgNativeComplete(token, { ok: false, error: { code: error.code, message: error.message } })); }
+    try {
+      this.validate(name, false); this.pending.set(token, { name, args });
+      if (name === "services.call") this.serviceHub.call(this, args, token);
+    }
+    catch (error) { this.pending.delete(token); queueMicrotask(() => this.context.__wgNativeComplete(token, { ok: false, error: { code: error.code, message: error.message } })); }
   }
   nextRequest(name) {
     const entry = [...this.pending].find(([, request]) => request.name === name);
@@ -266,6 +308,7 @@ class NativeHostFixture {
   }
   async stop() {
     this.active = false;
+    this.serviceHub.stop(this);
     this.unloading = true;
     this.pending.clear(); this.timers.clear(); this.surfaces.clear(); this.toasts = [];
     this.eventSubscriptions.clear(); this.settingsItems.clear();
@@ -279,4 +322,51 @@ class NativeHostFixture {
   }
 }
 
-module.exports = { NativeHostFixture, resources, sdkDirectory, telegramEvents, requestEvents };
+class ServiceHubFixture {
+  constructor() { this.providers = new Map(); this.pending = new Map(); this.sequence = 0; }
+  key(host, name) { return JSON.stringify([host.scope, name]); }
+  provide(host, [name, version, handler]) {
+    if (!name || name.length > 128 || !version) fail("INVALID_ARGUMENT", "Invalid service metadata");
+    const key = this.key(host, name), old = this.providers.get(key);
+    if (old && old.host !== host) fail("SERVICE_CONFLICT", name);
+    if (old) this.unprovide(host, name);
+    this.providers.set(key, { host, name, version, handler });
+    return handler;
+  }
+  unprovide(host, name) {
+    const key = this.key(host, name), provider = this.providers.get(key);
+    if (!provider || provider.host !== host) return false;
+    this.providers.delete(key);
+    for (const [token, call] of this.pending) if (call.provider === provider) {
+      this.pending.delete(token);
+      call.consumer.pending.delete(call.request);
+      call.consumer.context.__wgNativeComplete(call.request, { ok: false, error: { code: "SERVICE_UNAVAILABLE", message: name } });
+    }
+    return true;
+  }
+  list(host) {
+    return [...this.providers.values()].filter(p => p.host.scope === host.scope && p.host.active).sort((a,b) => a.name.localeCompare(b.name)).map(p => ({ name:p.name, version:p.version, pluginId:p.host.pluginId }));
+  }
+  call(host, [name, method, args], request) {
+    const provider = this.providers.get(this.key(host, name));
+    if (!provider) fail("SERVICE_NOT_FOUND", name);
+    if (!Array.isArray(args) || ["constructor", "prototype", "__proto__"].includes(method)) fail("INVALID_ARGUMENT", method);
+    const token = "service-" + (++this.sequence);
+    this.pending.set(token, { provider, consumer: host, request });
+    queueMicrotask(() => { if (this.pending.has(token) && provider.host.active) provider.host.context.__wgNativeServiceCall(provider.handler, method, args, token, host.pluginId); });
+  }
+  resolve(host, token, response) {
+    const call = this.pending.get(token);
+    if (!call || call.provider.host !== host) return false;
+    this.pending.delete(token);
+    call.consumer.pending.delete(call.request);
+    if (call.consumer.active) call.consumer.context.__wgNativeComplete(call.request, response);
+    return true;
+  }
+  stop(host) {
+    for (const provider of [...this.providers.values()]) if (provider.host === host) this.unprovide(host, provider.name);
+    for (const [token, call] of this.pending) if (call.consumer === host) this.pending.delete(token);
+  }
+}
+
+module.exports = { NativeHostFixture, ServiceHubFixture, resources, sdkDirectory, telegramEvents, requestEvents };

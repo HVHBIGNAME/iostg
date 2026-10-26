@@ -11,6 +11,7 @@ The four recovered catalog actions are connected through the searchable/full set
 - Partial imports retain the latest values of absent settings, including privacy flags. Invalid touched stores are not replaced.
 - Public-fork chat/tab/story/folder/context-menu mirrors are prepared before canonical storage is committed; notifications follow the unlocked update.
 - Device-local, non-synchronizing Keychain backup with unlocked-only protection and read-back verification.
+- Shared/private profile scope is fixed when the transfer screen opens. Account switches do not redirect an in-progress import; Keychain backups have separate profile items. See [ACCOUNT_SETTINGS_PORT.md](ACCOUNT_SETTINGS_PORT.md).
 - The generated `localStarsCount` type is corrected to `Int64`, matching the recovered native getter `0x201828`. Old Boolean records read as zero unless an exact numeric primitive mirror exists. This does not change any server-side Stars balance.
 
 The portable JSON format is **`whitegram.settings.port`, version 1**. Compatibility with the original IPA's backup format has not been established. The original action/type evidence is recorded in `FEATURE_COVERAGE.json` and `FEATURE_COVERAGE.md`; reconstructed allowlist/range rules are explicit in `WhitegramSettingsArchiveSchema.swift`.

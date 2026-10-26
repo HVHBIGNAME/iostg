@@ -302,4 +302,53 @@ final class WhitegramHistoryStoreTests: XCTestCase {
         let after = try await self.exported(store)
         XCTAssertEqual(before, after)
     }
+
+    func testEntityArchiveRoundTripRejectsInvalidUTF16AndKeepsWidePeerId() async throws {
+        let wide = try XCTUnwrap(whitegramHistoryPackedPeer(namespace: 0, id: 5000000000))
+        let entityData = Data("[{\"start\":0,\"end\":2,\"_rawValue\":11,\"peerId\":\(wide)}]".utf8)
+        let entities = try JSONDecoder().decode([WhitegramHistoryEntity].self, from: entityData)
+        let record = WhitegramHistoryEntry(accountId: "101", peerId: "200", namespace: 0, messageId: 7, revision: 1,
+            messageDate: 1700000000, capturedAt: 1700000050, event: .deleted, text: "🙂 original", authorId: nil,
+            outgoing: false, mediaCount: 0, entities: entities)
+        let store = self.store()
+        let added = try await imported(archive([record]), into: store)
+        XCTAssertEqual(added, 1)
+        let restored = try await snapshot(self.store())
+        XCTAssertEqual(restored.first?.entities, entities)
+        XCTAssertEqual(restored.first?.entities?.first?.peerId, wide)
+        let malformed = try JSONDecoder().decode([WhitegramHistoryEntity].self, from: Data("[{\"start\":1,\"end\":2,\"_rawValue\":6}]".utf8))
+        XCTAssertFalse(malformed[0].isValid(in: record.text))
+        let bad = WhitegramHistoryEntry(accountId: "101", peerId: "200", namespace: 0, messageId: 8, revision: 0,
+            messageDate: 1700000000, capturedAt: 1700000050, event: .deleted, text: record.text, authorId: nil,
+            outgoing: false, mediaCount: 0, entities: malformed)
+        do { _ = try await imported(archive([bad]), into: store); XCTFail("Split surrogate imported") } catch {}
+        let after = try await snapshot(store)
+        XCTAssertEqual(after, restored)
+    }
+
+    func testOriginalExportUsesExactlyNineFieldsAndRoundTripsNamespaces() async throws {
+        let store = self.store()
+        let peer = String(try XCTUnwrap(whitegramHistoryPackedPeer(namespace: 2, id: 5000000000)))
+        store.append(self.entry(peer: peer, event: .deleted, text: "original text"))
+        let data: Data = try await result { store.exportOriginalBackup(matching: WhitegramHistoryQuery(event: .deleted), completion: $0) }
+        let rows = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [[String: Any]])
+        XCTAssertEqual(Set(rows[0].keys), Set(["peerIdNamespace", "peerIdId", "messageIdNamespace", "messageIdId", "authorIdNamespace", "authorIdId", "text", "timestamp", "isOutgoing"]))
+        XCTAssertNil(rows[0]["accountId"])
+        let legacy = try JSONDecoder().decode([WhitegramHistoryLegacyMessage].self, from: data)
+        XCTAssertEqual(legacy.first?.peerIdNamespace, 2)
+        XCTAssertEqual(legacy.first?.peerIdId, 5000000000)
+        let entry = try XCTUnwrap(legacy.first).entry(accountId: "101", capturedAt: 1700000050)
+        XCTAssertEqual(entry.peerId, peer)
+        XCTAssertEqual(entry.text, "original text")
+    }
+
+    func testConflictingDuplicateArchiveKeysFailBeforeMerge() async throws {
+        let store = self.store()
+        let one = self.entry(text: "first"), two = self.entry(text: "conflicting")
+        do { _ = try await imported(archive([one, two]), into: store); XCTFail("Ambiguous key accepted") } catch {}
+        let empty = try await snapshot(store)
+        XCTAssertTrue(empty.isEmpty)
+        let added = try await imported(archive([one, one]), into: store)
+        XCTAssertEqual(added, 1)
+    }
 }

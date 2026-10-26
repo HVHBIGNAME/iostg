@@ -24,15 +24,16 @@ enum WhitegramOnlineHistoryCapture {
             guard peerId != accountPeerId, peerId.namespace == Namespaces.Peer.CloudUser,
                   transaction.isPeerContact(peerId: peerId), let status = statuses[peerId] else { continue }
             let isOnline: Bool
+            let serverTimestamp: Double?
             switch status {
-            case .userStatusOnline: isOnline = true
-            case .userStatusOffline: isOnline = false
+            case .userStatusOnline: isOnline = true; serverTimestamp = nil
+            case let .userStatusOffline(data): isOnline = false; serverTimestamp = Double(data.wasOnline)
             default: continue
             }
             let peer = transaction.getPeer(peerId)
             entries.append(WhitegramOnlineHistoryEntry(peerId: peerId.toInt64(),
                 peerName: peer.map { EnginePeer($0).debugDisplayTitle } ?? String(peerId.toInt64()),
-                peerUsername: (peer as? TelegramUser)?.addressName, isOnline: isOnline, timestamp: timestamp))
+                peerUsername: (peer as? TelegramUser)?.addressName, isOnline: isOnline, timestamp: timestamp, serverTimestamp: serverTimestamp))
         }
         WhitegramOnlineHistoryStore.forAccount(accountPeerId.toInt64()).append(entries)
     }

@@ -7,6 +7,7 @@ public struct WhitegramMediaSettings: Equatable {
     public let alwaysSendHD: Bool
     public let photoCompressionQuality: Double
     public let rememberLastCamera: Bool
+    public let chooseCameraBeforeRoundVideo: Bool
     public let videoMessageCamera: Int?
     public let useTelegramCameraSettings: Bool
     public let backCameraPreset: String
@@ -49,6 +50,7 @@ public struct WhitegramMediaSettings: Equatable {
         let quality = number("photoCompressionQuality") ?? 0.7
         self.photoCompressionQuality = quality > 0.0 ? min(1.0, max(0.1, quality)) : 0.7
         self.rememberLastCamera = boolean("rememberLastCamera")
+        self.chooseCameraBeforeRoundVideo = boolean("chooseCameraBeforeRoundVideo")
         self.videoMessageCamera = integer("videoMessageCamera").flatMap { (0...2).contains($0) ? $0 : nil }
         // The original getter selects custom mode for installations with any of
         // these six keys but no explicit stock/custom choice (Core 0x200438).
@@ -71,6 +73,24 @@ public struct WhitegramMediaSettings: Equatable {
 
     public static var current: WhitegramMediaSettings {
         return WhitegramMediaSettings(values: WhitegramPreferences.values(), legacyDefaults: .standard)
+    }
+
+    public var asksForRoundVideoCamera: Bool {
+        return self.chooseCameraBeforeRoundVideo || self.videoMessageCamera == 2
+    }
+
+    public func initialRoundVideoFrontCamera(selected: Bool?, fallback: Bool = true) -> Bool {
+        if let selected { return selected }
+        switch self.videoMessageCamera {
+        case 0: return true
+        case 1: return false
+        default: return fallback
+        }
+    }
+
+    // The original picker writes the selected side independently of rememberLastCamera.
+    @discardableResult public static func selectRoundVideoCamera(front: Bool) -> Bool {
+        return WhitegramPreferences.set(front ? 0 : 1, for: "videoMessageCamera")
     }
 
     public func photoMaxDimension(hd: Bool) -> Int32 {
@@ -179,6 +199,7 @@ public struct WhitegramMediaSettings: Equatable {
     public static let resetValues: [String: Any] = [
         "cleanMetadataOnSend": false, "sendLargePhotos": false, "alwaysSendHD": false,
         "photoCompressionQuality": 0.7, "rememberLastCamera": false, "videoMessageCamera": 0,
+        "chooseCameraBeforeRoundVideo": false,
         "useTelegramCameraSettings": true, "backCameraPreset": "1080p", "frontCameraPreset": "1080p",
         "backCameraFPS": 30, "frontCameraFPS": 30, "roundVideoBitrate": "medium",
         "roundCameraWideAngle": false, "staticZoomEnabled": false

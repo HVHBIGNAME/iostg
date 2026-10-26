@@ -45,6 +45,7 @@ private func whitegramAccountRows(_ actions: WhitegramAccountActions) -> [Whiteg
     }
     let text = actions.text
     if actions.screen == .accounts {
+        row("accountSettings", WhitegramLocalization.string("accountSettings.title", baseLanguage: actions.context.sharedContext.currentPresentationData.with { $0.strings.baseLanguageCode }))
         row("keepUnavailableAccounts", text("Keep unavailable accounts", "Сохранять недоступные аккаунты"), kind: .toggle(WhitegramPreferences.bool("keepUnavailableAccounts")))
         row("accountSwitcherEnabled", text("Account switcher", "Переключатель аккаунтов"), kind: .toggle(WhitegramPreferences.bool("accountSwitcherEnabled")))
         row("keychainAccounts", text("Accounts in Keychain", "Аккаунты в Связке ключей"))

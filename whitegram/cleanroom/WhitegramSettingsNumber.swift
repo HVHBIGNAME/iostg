@@ -5,9 +5,12 @@ enum WhitegramSettingsNumber: String {
     case stickerSizeSlider, tabBarScaleSlider, tabBarWidthSlider, photoQualitySlider
     case deletedMessagesOpacitySlider, playbackSpeedSlider, localStarsCountSlider
     case voiceChangerPitchSlider, voiceChangerTimbreSlider, voiceChangerEchoSlider, voiceChangerClaritySlider
+    case particleSpeedSlider, particleDensitySlider
 
     var key: String {
         switch self {
+        case .particleSpeedSlider: return "particleSpeed"
+        case .particleDensitySlider: return "particleDensity"
         case .stickerSizeSlider: return "stickerSizeScale"
         case .tabBarScaleSlider: return "tabBarScale"
         case .tabBarWidthSlider: return "tabBarWidthScale"
@@ -36,6 +39,7 @@ enum WhitegramSettingsNumber: String {
         if let control = self.voiceControl { return control.range }
         switch self {
         case .stickerSizeSlider: return WhitegramAppearancePolicy.stickerPercentRange
+        case .particleSpeedSlider, .particleDensitySlider: return 0 ... 2
         case .tabBarScaleSlider, .tabBarWidthSlider: return WhitegramAppearancePolicy.tabPercentRange
         case .photoQualitySlider: return 10 ... 100
         case .deletedMessagesOpacitySlider: return 1 ... 100
@@ -59,6 +63,8 @@ enum WhitegramSettingsNumber: String {
         if let control = self.voiceControl { return WhitegramVoiceSettings(values: WhitegramPreferences.values()).value(for: control) }
         switch self {
         case .stickerSizeSlider: return WhitegramAppearancePolicy.current.stickerScale * 100.0
+        case .particleSpeedSlider: return Double(WhitegramVisualPolicy(values: WhitegramPreferences.values()).particleSpeed)
+        case .particleDensitySlider: return Double(WhitegramVisualPolicy(values: WhitegramPreferences.values()).particleDensity)
         case .tabBarScaleSlider: return WhitegramAppearancePolicy.current.tabHeightPercent
         case .tabBarWidthSlider: return WhitegramAppearancePolicy.current.tabWidthPercent
         case .photoQualitySlider: return WhitegramMediaSettings.current.photoCompressionQuality * 100.0
@@ -80,6 +86,8 @@ enum WhitegramSettingsNumber: String {
             return WhitegramPreferences.set(value / 100.0, for: self.key)
         case .localStarsCountSlider:
             return WhitegramPreferences.set(Int64(value), for: self.key)
+        case .particleSpeedSlider, .particleDensitySlider:
+            return WhitegramPreferences.set(Int(value), for: self.key)
         default:
             return WhitegramPreferences.set(value, for: self.key)
         }

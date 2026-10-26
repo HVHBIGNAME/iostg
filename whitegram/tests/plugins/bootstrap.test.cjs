@@ -238,7 +238,7 @@ test("native UI normalization, binding, stale callback invalidation and close ar
   await host.flush();
   assert.equal(host.run("surface.isClosed"), true);
   assert.equal(host.run("closes"), 1);
-  assert.throws(() => host.run("wg.ui.sheet({content:wg.ui.Web('<b>unsupported</b>')})"), code("UNSUPPORTED_UI"));
+  assert.throws(() => host.run("wg.ui.sheet({content:wg.ui.h('imaginary')})"), code("UNSUPPORTED_UI"));
   assert.equal(host.surfaces.size, 0);
   await host.stop();
 });
@@ -296,10 +296,10 @@ test("recovered events, wildcard matching, once, streams and state batching work
 
 test("unsupported hooks cannot masquerade as installed capabilities", async () => {
   const host = new Host();
-  for (const api of ["tabs.add", "ui.overlay", "ui.provide", "services.provide", "jobs.schedule", "tg.invoke", "postbox.transaction", "lang.python.run", "fakeAPI"]) {
+  for (const api of ["tabs.add", "ui.provide", "jobs.schedule", "tg.invoke", "postbox.transaction", "lang.python.run", "fakeAPI"]) {
     assert.equal(host.run(`wg.capabilities.has(${JSON.stringify(api)})`), false, api);
   }
-  for (const source of ["wg.tabs.add({})", "wg.ui.overlay({})", "wg.ui.provide('slot',function(){})", "wg.intercept('tg',function(){})", "wg.services.provide('service',{})", "wg.fakeAPI()", "wg.__native.fakeAPI()"] ) {
+  for (const source of ["wg.tabs.add({})", "wg.ui.provide('slot',function(){})", "wg.intercept('tg',function(){})", "wg.services.unsupported()", "wg.fakeAPI()", "wg.__native.fakeAPI()"] ) {
     assert.throws(() => host.run(source), code("UNSUPPORTED_API"), source);
   }
   assert.throws(() => host.run("wg.onSendMessage(function(){})"), code("PERMISSION_DENIED"));
@@ -442,7 +442,7 @@ test("async callbacks supplied by surface.update and surface.set are observed", 
 test("a rejected surface update releases the invalidated native controls", async () => {
   const host = new Host();
   host.run("var invalidated=wg.ui.sheet({content:wg.ui.Button('Old',function(){})});");
-  assert.throws(() => host.run("invalidated.update(wg.ui.Web('unsupported'))"), code("UNSUPPORTED_UI"));
+  assert.throws(() => host.run("invalidated.update(wg.ui.h('imaginary'))"), code("UNSUPPORTED_UI"));
   await host.flush();
   assert.equal(host.surfaces.size, 0);
   assert.equal(host.run("invalidated.isClosed"), true);
@@ -537,10 +537,10 @@ test("POST with an empty body stays POST and UI callbacks preserve legacy arity"
 
 test("capabilities describe implemented leaf methods and reject unsupported siblings", async () => {
   const host = new Host();
-  for (const api of ["events.on", "events.once", "events.emit", "events.stream", "bytes.from", "ui.surfaces", "ui.closeAll", "ui.Button", "ui.el.Image", "client.sendFile", "permissions.has", "client.currentChat"]) {
+  for (const api of ["events.on", "events.once", "events.emit", "events.stream", "bytes.from", "ui.surfaces", "ui.closeAll", "ui.Button", "ui.el.Image", "ui.overlay", "ui.Web", "ui.ZStack", "services.consume", "client.sendFile", "permissions.has", "client.currentChat"]) {
     assert.equal(host.run(`wg.capabilities.has(${JSON.stringify(api)})`), true, api);
   }
-  for (const api of ["ui.el.Web", "ui.ZStack", "tg.invoke", "lang.python.run", "net.dns"]) {
+  for (const api of ["ui.el.Imaginary", "tg.invoke", "lang.python.run", "net.dns"]) {
     assert.equal(host.run(`wg.capabilities.has(${JSON.stringify(api)})`), false, api);
   }
   await host.stop();

@@ -54,5 +54,12 @@ def apply_chat_list_visibility_patches(root):
     # Rebuild entries on preference changes even if Postbox has no new update.
     anchor = "            self.statePromise.get(),\n"
     patches.replace("hideSponsoredProxyChannel", NODE, anchor,
-                    "            combineLatest(self.statePromise.get(), WhitegramAppearanceSettings.signal()) |> map { value, _ in value },\n")
+                    "            combineLatest(self.statePromise.get(), WhitegramAppearanceSettings.signal()) |> map { value, _ in value },\n",
+                    accepted_after=("""            combineLatest(self.statePromise.get(), WhitegramAppearanceSettings.signal(), WhitegramClientInterfaceSettings.signal()) |> map { value, _, _ in
+                var value = value
+                let data = value.presentationData
+                value.presentationData = ChatListPresentationData(theme: data.theme, fontSize: data.fontSize, strings: data.strings, dateTimeFormat: data.dateTimeFormat, nameSortOrder: data.nameSortOrder, nameDisplayOrder: data.nameDisplayOrder, disableAnimations: data.disableAnimations)
+                return value
+            },
+""",))
     return patches.write()

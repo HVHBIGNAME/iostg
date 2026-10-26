@@ -17,9 +17,13 @@ def apply_online_history_patches(root):
         ("updatePeerPresencesClean", "recordUsers", "users: peerPresences"),
         ("updatePeerPresenceLastActivities", "record", "statuses: peerPresences.mapValues { $0.status }"),
     ):
-        anchor = f"    }})\n}}\n\nfunc {next_function}("
+        spy_method = "recordUsers" if method == "recordUsers" else "recordPresences"
+        spy_values = "users: peerPresences" if method == "recordUsers" else "statuses: peerPresences.mapValues { $0.status }"
+        spy_hook = f"    WhitegramSpyRuntime.{spy_method}(transaction: transaction, accountPeerId: accountPeerId, {spy_values}, acceptedPeerIds: Set(parsedPresences.keys))\n"
+        companion = spy_hook if spy_hook in patches.read(PEERS) else ""
+        anchor = f"    }})\n{companion}}}\n\nfunc {next_function}("
         hook = f"    WhitegramOnlineHistoryCapture.{method}(transaction: transaction, accountPeerId: accountPeerId, {values}, acceptedPeerIds: Set(parsedPresences.keys))\n"
-        replacement = f"    }})\n{hook}}}\n\nfunc {next_function}("
+        replacement = f"    }})\n{hook}{companion}}}\n\nfunc {next_function}("
         marker = f"WhitegramOnlineHistoryCapture.{method}("
         source = patches.read(PEERS)
         if marker in source and replacement not in source:
