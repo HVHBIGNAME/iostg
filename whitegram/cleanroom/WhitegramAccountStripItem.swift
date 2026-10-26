@@ -60,7 +60,7 @@ private final class WhitegramAccountStripButton: UIButton {
     @objc private func pressed() { activate?() }
     @objc func earlier() -> Bool { moveEarlier?(); return moveEarlier != nil }
     @objc func later() -> Bool { moveLater?(); return moveLater != nil }
-    @objc func menu() -> Bool { accountMenu?(); return accountMenu != nil }
+    @objc func whitegramOpenAccountMenu() -> Bool { accountMenu?(); return accountMenu != nil }
 }
 
 private final class WhitegramAccountStripNode: PeerInfoScreenItemNode {
@@ -151,7 +151,7 @@ private final class WhitegramAccountStripNode: PeerInfoScreenItemNode {
             button.accessibilityCustomActions = [
                 UIAccessibilityCustomAction(name: "Move earlier", target: button, selector: #selector(WhitegramAccountStripButton.earlier)),
                 UIAccessibilityCustomAction(name: "Move later", target: button, selector: #selector(WhitegramAccountStripButton.later)),
-                UIAccessibilityCustomAction(name: "Account menu", target: button, selector: #selector(WhitegramAccountStripButton.menu))
+                UIAccessibilityCustomAction(name: "Account menu", target: button, selector: #selector(WhitegramAccountStripButton.whitegramOpenAccountMenu))
             ]
         }
         for action in item.actions {
