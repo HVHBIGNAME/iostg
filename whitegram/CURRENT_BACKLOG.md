@@ -14,14 +14,15 @@ screens also require behavioral/parity validation; the original 333-row audit in
 This row depends on other-user style delivery/cache, which is absent in the
 current client. The help row is connected. No writable no-op toggle is provided.
 
-## Build 34652 validation still required
+## Build 34652 validation
 
 Account profiles, local pins, navigation/backgrounds, previews, client/device
 controls, presence/read capture, visual effects, feed and classic adapters now
 have installed consumers. See [BUILD_34652.md](BUILD_34652.md) and the corresponding
 `*_PORT.md` documents for their actual contracts and original-parity gaps.
 
-- [ ] Apple SDK release/simulator compilation of the entire increment.
+- [x] Apple SDK release/simulator compilation of the entire increment — [run 40275611466](https://github.com/HVHBIGNAME/iostg/actions/runs/40275611466).
+- [x] Fresh install and relaunch in the iOS 26.5 simulator, plus login connectivity probe.
 - [ ] Device checks for account switching, filter deletion, pin ordering and media lifecycle.
 - [ ] Original visual/interaction comparison, including inline feed media and classic layout.
 - [ ] Original private-settings absent-key migration/tombstone semantics.

@@ -11,7 +11,8 @@ This is a cleanroom behavior design. Original accessor evidence is verified belo
 the original app's storage format and overflow/reorder semantics have not been
 recovered. Build 34652 connects `LOCAL_PINS_BOOLEAN_CAPABILITIES["unlimitedPinnedChats"]`
 to the catalogue and integrates local filter-deletion and account-logout cleanup.
-Apple validation remains pending.
+Apple release/simulator compilation passed in [build 34652](BUILD_34652.md).
+Signed-in device interaction validation remains pending.
 
 ## Installer contract
 
@@ -180,7 +181,7 @@ and WSL `/opt/swift/usr/bin/swiftc` 6.4, Swift 5 mode with warnings as errors:
 - **48 compiled policy/storage checks passed**, including 70,000 local pins,
   complete Int64 roundtrip, account/group/filter isolation, reopen, invalid-store
   retention, reorder conflicts, removal/restoration, and explicit scope reset.
-- **38 compiled runtime/list checks passed** using the actual three new runtime
+- **40 compiled runtime/list checks passed** using the actual three new runtime
   files and actual shared `WhitegramPreferences` with explicit small API fixtures:
   off-page pin fetching, mixed order, native row payload preservation, navigation
   anchors, older-page exclusion, chronological cloud-unpin placement, archive/folder projection, live preference/order
@@ -204,8 +205,8 @@ $python = 'C:\coding\telegram\whitegram\whitegram-check-env\Scripts\python.exe'
 
 - Local filter-edit and logout hooks are installed; remote filter deletion and
   subsequent reuse of the same filter ID still require lifecycle validation.
-- Full Apple SDK/Bazel typecheck and device/simulator validation remain open.
-  Fixture compilation is not a Telegram module build. In particular, verify
+- Apple SDK/Bazel device and simulator builds passed. Signed-in interaction
+  validation remains open. In particular, verify
   merge-list animations, drag cancellation/concurrent refresh, swipe/menu alerts,
   archive headers, filter changes, scroll-back across page boundaries, unread/
   story updates and hole filling with real Postbox/SwiftSignalKit scheduling.
