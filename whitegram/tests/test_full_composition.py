@@ -117,6 +117,17 @@ class FullCompositionTests(unittest.TestCase):
                 stage(self.patchers, replay)
             self.assertEqual(replay.pending, replay.original)
 
+    def test_plugin_hooks_replay_on_top_of_navigation_without_duplicate_events(self):
+        from plugin_hook_patches import plugin_hook_patches
+        staged = SourcePatches(self.root)
+        stage(self.patchers, staged)
+        first = dict(staged.pending)
+        plugin_hook_patches(staged)
+        self.assertEqual(staged.pending, first)
+        chat = staged.pending["submodules/TelegramUI/Sources/ChatController.swift"]
+        self.assertEqual(chat.count("WhitegramPluginHooks.chatOpened("), 1)
+        self.assertEqual(chat.count("WhitegramPluginHooks.chatClosed("), 2)
+
     def test_composed_sources_have_no_new_swift_parser_errors(self):
         staged = SourcePatches(self.root)
         stage(self.patchers, staged)

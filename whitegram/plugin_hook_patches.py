@@ -93,6 +93,9 @@ private func whitegramPluginEnqueueAcceptedMessages(account: Account, peerId: Pe
     _replace(patches, "pluginChatEvents", chat, anchor, '''    private let whitegramPluginChatToken = UUID().uuidString
 ''' + anchor)
     anchor = "    override public func viewDidAppear(_ animated: Bool) {\n        super.viewDidAppear(animated)\n"
+    background_lifecycle = "        self.chatDisplayNode.whitegramBackground.setVisible(true)\n"
+    if anchor + background_lifecycle in patches.read(chat):
+        anchor += background_lifecycle
     _replace(patches, "pluginChatEvents", chat, anchor, anchor + '''
         if case .standard(.default) = self.mode, let peerId = self.chatLocation.peerId {
             WhitegramPluginHooks.chatOpened(postbox: self.context.account.postbox, token: self.whitegramPluginChatToken,
