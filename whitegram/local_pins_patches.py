@@ -70,10 +70,14 @@ def local_pins_edits() -> tuple[LocalPinsEdit, ...]:
     anchor = "context.engine.peers.toggleItemPinned(location: location, itemId: itemId)"
     edit("local-pins-toggle", node, anchor, "context.engine.peers.toggleItemPinned(location: location, itemId: itemId, whitegramLocalOperation: strongSelf.chatListView?.originalList.whitegramLocalPinBase != nil)")
     anchor = "            return chatListViewForLocation(chatListLocation: location, location: listLocation, account: context.account, shouldLoadCanMessagePeer: shouldLoadCanMessagePeer)\n"
-    edit("local-pins-loading", node, anchor, """            if case .chatList = mode {
-                return whitegramLocalPinView(chatListLocation: location, location: listLocation, account: context.account, shouldLoadCanMessagePeer: shouldLoadCanMessagePeer)
+    edit("local-pins-loading", node, anchor, """            let whitegramView: Signal<ChatListNodeViewUpdate, NoError>
+            if case .chatList = mode {
+                whitegramView = whitegramLocalPinView(chatListLocation: location, location: listLocation, account: context.account, shouldLoadCanMessagePeer: shouldLoadCanMessagePeer)
+            } else {
+                whitegramView = chatListViewForLocation(chatListLocation: location, location: listLocation, account: context.account, shouldLoadCanMessagePeer: shouldLoadCanMessagePeer)
             }
-""" + anchor)
+            return whitegramView
+""")
     location = LIST + "Node/ChatListNodeLocation.swift"
     anchor = "private func chatListNodeViewUpdateWithCommunitySummaries(account: Account, update: ChatListNodeViewUpdate) -> Signal<ChatListNodeViewUpdate, NoError> {\n"
     edit("local-pins-loading", location, anchor, anchor.replace("private func", "internal func", 1))

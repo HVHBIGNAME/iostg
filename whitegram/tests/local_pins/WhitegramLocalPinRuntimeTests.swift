@@ -36,6 +36,10 @@ enum RuntimeTests {
         check(transaction.cloud == cloud, "pin makes no cloud mutation")
         baseFixture = EngineChatList(items: [item(4, timestamp: 100), item(2, timestamp: 10, pin: 1), item(1, timestamp: 20, pin: 0)], groupItems: [7], additionalItems: [8], hasEarlier: true)
         account.viewTracker.allItems = [item(3, timestamp: -1000), item(4, timestamp: 100), item(2, timestamp: 10), item(1, timestamp: 20)]
+        for mode in [LocalPinConsumerMode.chatList, .peers] {
+            let (_, filter) = value(localPinConsumer(account: account, mode: mode, listLocation: .initial(filter: ChatListFilter(7))))
+            check(filter?.id == 7, "real consumer preserves the filter alongside its update")
+        }
         var updates: [ChatListNodeViewUpdate] = []
         let view = whitegramLocalPinView(chatListLocation: .chatList(.root), location: .initial(filter: nil), account: account, shouldLoadCanMessagePeer: false)
         let disposable = view.start { updates.append($0) }

@@ -59,7 +59,24 @@ def main():
                             "-emit-module-path", wsl_path(scratch / (name + ".swiftmodule")),
                             "-o", wsl_path(scratch / ("lib" + name + ".so"))], check=True)
         runtime = scratch / "runtime-checks"
+        consumer = scratch / "ChatListConsumer.swift"
+        source = (scratch / "submodules/ChatListUI/Sources/Node/ChatListNode.swift").read_text(encoding="utf-8")
+        anchor = "        |> mapToSignal { listLocation -> Signal<(ChatListNodeViewUpdate, ChatListFilter?), NoError> in\n"
+        body = anchor + source.split(anchor, 1)[1].split("        let previousState", 1)[0]
+        consumer.write_text('''import Postbox
+import TelegramCore
+import SwiftSignalKit
+import AccountContext
+enum LocalPinConsumerMode { case chatList, peers }
+private struct LocalPinConsumerContext { let account: Account }
+func localPinConsumer(account: Account, mode: LocalPinConsumerMode, listLocation: ChatListNodeLocation) -> Signal<(ChatListNodeViewUpdate, ChatListFilter?), NoError> {
+    let context = LocalPinConsumerContext(account: account)
+    let location = ChatListControllerLocation.chatList(.root)
+    let shouldLoadCanMessagePeer = false
+    return Signal<ChatListNodeLocation, NoError>.single(listLocation)
+''' + body + "}\n", encoding="utf-8")
         subprocess.run([*flags, *["-l" + name for name, _, _ in modules],
+                        wsl_path(consumer),
                         wsl_path(ROOT / "cleanroom" / "WhitegramLocalPinList.swift"),
                         wsl_path(fixtures / "ListFixture.swift"), wsl_path(fixtures / "WhitegramLocalPinRuntimeTests.swift"),
                         "-o", wsl_path(runtime)], check=True)
