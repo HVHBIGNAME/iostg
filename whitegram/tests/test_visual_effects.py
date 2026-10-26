@@ -35,6 +35,19 @@ class VisualSourcePatches(unittest.TestCase):
         cls.source = Path(os.environ["WHITEGRAM_ASSEMBLED_SOURCE"])
         cls.paths = sorted({edit.path for edit in visual.visual_effects_edits()})
         cls.assembled = {path: (cls.source / path).read_text(encoding="utf-8") for path in cls.paths}
+        # Exercise this stage at its installer position, even when CI supplies the
+        # fully installed tree. Reverse only exact later adapters in this copy.
+        from feed_classic_patches import feed_classic_edits
+        from navigation_patches import navigation_edits
+        for edits in (feed_classic_edits(), navigation_edits()):
+            for edit in reversed(edits):
+                if edit.path in cls.assembled:
+                    cls.assembled[edit.path] = cls.assembled[edit.path].replace(edit.after, edit.before)
+        baseline = MemoryRoot(cls.assembled)
+        patches = SourcePatches(baseline)
+        visual.visual_effects_patches(patches, reverse=True)
+        patches.write()
+        cls.assembled = baseline.texts()
         cls.pristine = {path: subprocess.check_output(["git", "-C", str(cls.source), "show", f"{PIN}:{path}"]).decode("utf-8") for path in cls.paths}
 
     def test_pristine_and_assembled_install_replay_and_uninstall_exactly(self):

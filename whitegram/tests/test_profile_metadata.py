@@ -92,8 +92,14 @@ class ProfileMetadataPatchTests(unittest.TestCase):
         self.assertIn("DispatchQueue.main.async { adapter.cancel() }", screen)
         self.assertIn("WhitegramPeerMetadataSettings.signal()", screen)
         items = root.text(metadata.ITEMS)
-        self.assertIn("case unofficial\n    case wgPeerMetadata\n    case community", items)
-        self.assertIn("case peerInfoTrailing\n    case wgPeerInfoTrailing\n    case peerSettings", items)
+        sections = items.split("enum InfoSection: Int, CaseIterable {", 1)[1].split("}", 1)[0]
+        for cases in (("unofficial", "wgPeerMetadata", "community"), ("peerInfoTrailing", "wgPeerInfoTrailing", "peerSettings")):
+            positions = []
+            for name in cases:
+                declaration = "case " + name + "\n"
+                self.assertEqual(sections.count(declaration), 1)
+                positions.append(sections.index(declaration))
+            self.assertEqual(positions, sorted(positions))
         self.assertIn("items[.wgPeerMetadata, default: []].append(item)", items)
         self.assertIn("items[.wgPeerInfoTrailing, default: []].append(item)", items)
 

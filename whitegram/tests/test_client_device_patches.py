@@ -115,7 +115,11 @@ class DeviceIntegrationTests(unittest.TestCase):
     def test_missing_device_anchor_fails_before_any_write(self):
         patches = self.source()
         patches.read(REQUEST)
-        patches.pending[REQUEST] = patches.pending[REQUEST].replace('[buffer appendTLString:_apiEnvironment.deviceModel]', '[buffer appendTLString:@"broken"]')
+        original = '[buffer appendTLString:_apiEnvironment.deviceModel]'
+        installed = '[buffer appendTLString:whitegramDeviceName.length != 0 ? whitegramDeviceName : _apiEnvironment.deviceModel]'
+        anchor = installed if installed in patches.pending[REQUEST] else original
+        self.assertEqual(patches.pending[REQUEST].count(anchor), 1)
+        patches.pending[REQUEST] = patches.pending[REQUEST].replace(anchor, '[buffer appendTLString:@"broken"]')
         with patch('client_device_patches.SourcePatches', return_value=patches), patch.object(patches, 'write') as write:
             with self.assertRaises(ValueError): apply_client_device_patches(patches.root)
             write.assert_not_called()
