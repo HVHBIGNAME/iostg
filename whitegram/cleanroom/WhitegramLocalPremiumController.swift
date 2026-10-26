@@ -23,7 +23,7 @@ public final class WhitegramLocalPremiumController: ViewController, UITableViewD
         }
     }
 
-    required public init(coder: NSCoder) { return nil }
+    required public init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
     deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
 
     override public func loadDisplayNode() {

@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import UniformTypeIdentifiers
 import AVFoundation
 import ImageIO
 import Display
@@ -89,7 +90,7 @@ public final class WhitegramBackgroundController: ViewController, UITableViewDat
                 try WhitegramBackgroundStore.reset(self.kind, accountId: self.context.account.id.int64)
             } else if indexPath.row == 0 {
                 self.pickerScope = try WhitegramPreferences.scope(accountId: self.context.account.id.int64)
-                let picker = UIDocumentPickerViewController(documentTypes: [self.kind == .cover ? "public.image" : "public.movie"], in: .import)
+                let picker = UIDocumentPickerViewController(forOpeningContentTypes: [self.kind == .cover ? .image : .movie], asCopy: true)
                 picker.allowsMultipleSelection = false
                 picker.delegate = self
                 self.presentUIKit(picker)
