@@ -66,6 +66,16 @@ def stage(patchers, staged, *, replay_each=False):
 
 
 class RuntimeInstallationTests(unittest.TestCase):
+    def test_installed_runtime_sources_pass_the_ci_swift_parser(self):
+        from validate_port import errors
+        parser = Parser(Language(tree_sitter_swift.language()))
+        manifest, _ = installer_configuration()
+        for source in manifest:
+            if source.endswith(".swift"):
+                with self.subTest(source=source):
+                    text = (OVERLAY / source).read_text(encoding="utf-8")
+                    self.assertEqual(errors(parser, text.encode("utf-8")), [])
+
     def test_every_runtime_source_is_installed_once_and_destinations_are_unambiguous(self):
         manifest, _ = installer_configuration()
         runtime = {path.relative_to(OVERLAY).as_posix() for path in (OVERLAY / "cleanroom").glob("*.swift")}

@@ -42,7 +42,7 @@ public enum WhitegramNavigationSettings {
         }
         try WhitegramPreferences.updateProfileForTransfer(scope: scope) { _, _ in
             guard try WhitegramPreferences.scope(accountId: accountId) == scope else { throw scopeChanged() }
-            return ((), changes, [:], [])
+            return (Void(), changes, [:], [])
         }
     }
 
