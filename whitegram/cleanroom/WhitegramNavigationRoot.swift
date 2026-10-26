@@ -18,7 +18,7 @@ final class WhitegramNavigationRootState {
         catch { NSLog("Whitegram: navigation settings could not be read: %@", error.localizedDescription); return false }
     }
 
-    func apply(to tab: TabBarControllerImpl, base: [ViewController], preferred: ViewController?, chats: ViewController, parent: NavigationController) {
+    func apply(to tab: TabBarControllerImpl, base: [ViewController], preferred: ViewController?, chats: ViewController, parent: TelegramRootControllerInterface) {
         let policy: WhitegramNavigationPolicy
         do { policy = try WhitegramNavigationSettings.policy(accountId: self.context.account.id.int64) }
         catch {
