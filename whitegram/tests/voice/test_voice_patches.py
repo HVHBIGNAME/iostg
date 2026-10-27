@@ -286,8 +286,14 @@ class VoiceUpstreamTests(unittest.TestCase):
 
 @unittest.skipIf(Parser is None, "Install tree-sitter==0.25.2 and tree-sitter-swift==0.7.3")
 class VoiceSwiftSyntaxTests(unittest.TestCase):
-    def assert_parses(self, name, content):
+    def assert_parses(self, name, content, baseline=None):
         parser = Parser(Language(tree_sitter_swift.language()))
+        if baseline is not None:
+            from validate_port import errors as parser_errors
+            before = [item["text"] for item in parser_errors(parser, baseline)]
+            after = [item["text"] for item in parser_errors(parser, content)]
+            self.assertEqual(after, before, f"New Swift parser diagnostics in {name}")
+            return
         root = parser.parse(content).root_node
         errors = []
         nodes = [root]

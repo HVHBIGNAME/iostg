@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 import sys
+import subprocess
 import unittest
 from unittest.mock import patch
 
@@ -37,6 +38,7 @@ class VoiceAdapterPatchTests(unittest.TestCase):
     def setUp(self):
         self.source = Path(SOURCE)
         self.original = {path: (self.source / path).read_bytes() for path in PATHS + PRIVACY_PATHS}
+        self.pristine = {path: subprocess.check_output(["git", "-C", str(self.source), "show", "HEAD:" + path]) for path in PATHS if path.endswith(".swift")}
         self.root = fixtures.MemoryRoot(dict(self.original))
 
     def test_complete_transform_replays_and_keeps_reference_unchanged(self):
@@ -83,7 +85,7 @@ class VoiceAdapterPatchTests(unittest.TestCase):
                 self.assertIn("eligible: self.viewOnceAvailable && scheduleTime == nil", staged.pending[voice.VIDEO])
                 if fixtures.Parser is not None:
                     for path in (voice.CHAT, voice.VIDEO):
-                        fixtures.VoiceSwiftSyntaxTests().assert_parses(path, staged.pending[path].encode("utf-8"))
+                        fixtures.VoiceSwiftSyntaxTests().assert_parses(path, staged.pending[path].encode("utf-8"), baseline=self.pristine[path])
                 for path, original in staged.original.items():
                     self.assertEqual((self.source / path).read_text(encoding="utf-8"), original)
                 outputs.append(staged.pending)
@@ -159,7 +161,7 @@ class VoiceAdapterPatchTests(unittest.TestCase):
         voice.apply_voice_patches(self.root)
         for path in PATHS:
             if path.endswith(".swift"):
-                fixtures.VoiceSwiftSyntaxTests().assert_parses(path, self.root.files[path])
+                fixtures.VoiceSwiftSyntaxTests().assert_parses(path, self.root.files[path], baseline=self.pristine[path])
 
 
 if __name__ == "__main__":

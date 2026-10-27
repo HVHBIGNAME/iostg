@@ -240,6 +240,7 @@ def _patch_video(patches: SourcePatches) -> None:
     fileprivate var didSend = false
 """)
     patches.replace(feature, VIDEO, "        self.allowLiveUpload = allowLiveUpload\n", "        self.allowLiveUpload = allowLiveUpload && !self.whitegramVoiceSettings.requiresVideoProcessing\n")
+    patches.replace(feature, VIDEO, "                    hasAdjustments: hasAdjustments,\n", "                    hasAdjustments: hasAdjustments || whitegramVideo != nil,\n")
     patches.replace(feature, VIDEO, "    deinit {\n        self.audioSessionDisposable?.dispose()\n", "    deinit {\n        self.whitegramVoiceTask?.cancel()\n        self.audioSessionDisposable?.dispose()\n")
     patches.replace(feature, VIDEO, "    public func discardVideo() {\n", "    public func discardVideo() {\n        self.whitegramVoiceTask?.cancel()\n        self.whitegramVoiceTask = nil\n")
     patches.replace(feature, VIDEO, """            let _ = (thumbnailImage
@@ -248,11 +249,12 @@ def _patch_video(patches: SourcePatches) -> None:
             let _ = (thumbnailImage
             |> deliverOnMainQueue).startStandalone(next: { [weak self] thumbnailImage in
 """)
-    patches.replace(feature, VIDEO, """                if !hasAdjustments, let liveUploadData, let data = try? Data(contentsOf: URL(fileURLWithPath: video.videoPath)) {
+    patches.replace(feature, VIDEO, """                if let storedFileId {
 """, """                if let whitegramVideo {
                     resource = LocalFileMediaResource(fileId: Int64.random(in: Int64.min ... Int64.max), size: Int64(whitegramVideo.data.count))
                     self.context.engine.resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: whitegramVideo.data, synchronous: true)
-                } else if !hasAdjustments, let liveUploadData, let data = try? Data(contentsOf: URL(fileURLWithPath: video.videoPath)) {
+                    outputDimensions = video.dimensions
+                } else if let storedFileId {
 """)
     patches.replace(feature, VIDEO, """                ), silentPosting, scheduleTime, repeatPeriod)
             })

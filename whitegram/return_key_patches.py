@@ -11,7 +11,12 @@ EDITOR = "submodules/TelegramUI/Components/RichTextEditor/Sources/RichTextEditor
 CANVAS = "submodules/TelegramUI/Components/RichTextEditor/Sources/RichTextEditorUIKit/Canvas/DocumentCanvasView.swift"
 INSERT = "submodules/TelegramUI/Components/RichTextEditor/Sources/RichTextEditorUIKit/Canvas/DocumentCanvasView+UITextInput.swift"
 LEGACY_KEYS = "submodules/TelegramUI/Components/Chat/ChatInputTextNode/ChatInputTextViewImpl/Sources/ChatInputTextViewImpl.m"
-PATHS = (PANEL, CAPTION, INPUT, SEAM, NATIVE, EDITOR, CANVAS, INSERT, LEGACY_KEYS)
+ENGINE = "submodules/TelegramUI/Components/RichTextEditor/Sources/RichTextEngineEditor/"
+ENGINE_PROTOCOL = ENGINE + "RichTextEditorProtocol.swift"
+ENGINE_HOST = ENGINE + "RichTextEngineEditorView+ComposerHost.swift"
+ENGINE_KEYS = ENGINE + "RichTextEngineEditorView+TableEditing.swift"
+ENGINE_GATE = ENGINE + "RichTextEngineEditorView+SurfaceGate.swift"
+PATHS = (PANEL, CAPTION, INPUT, SEAM, NATIVE, EDITOR, CANVAS, INSERT, LEGACY_KEYS, ENGINE_PROTOCOL, ENGINE_HOST, ENGINE_KEYS, ENGINE_GATE)
 
 
 def _validate_declarations(patches):
@@ -36,6 +41,32 @@ def apply_return_key_patches(root):
 
     def replace(path, before, after):
         patches.replace("sendOnReturnKey", path, before, after)
+
+    anchor = "    var onHardwareReturn: ((UIKeyModifierFlags) -> Bool)? { get set }\n"
+    replace(ENGINE_PROTOCOL, anchor, anchor + "    var onSoftwareReturn: (() -> Bool)? { get set }\n    var returnKeyType: UIReturnKeyType { get set }\n")
+    anchor = "    public var onHardwareReturn: ((UIKeyModifierFlags) -> Bool)?\n"
+    replace(ENGINE_HOST, anchor, anchor + "    public var onSoftwareReturn: (() -> Bool)?\n    var handlingHardwareReturn = false\n")
+    anchor = "    public var onHardwareReturn: ((UIKeyModifierFlags) -> Bool)? {\n"
+    replace(ENGINE_HOST, anchor, """    public var onSoftwareReturn: (() -> Bool)? {
+        get { composerHostState.onSoftwareReturn }
+        set { composerHostState.onSoftwareReturn = newValue }
+    }
+    public var returnKeyType: UIReturnKeyType {
+        get { engine.returnKeyType }
+        set {
+            guard engine.returnKeyType != newValue else { return }
+            engine.returnKeyType = newValue
+            if engine.isFirstResponder { engine.reloadInputViews() }
+        }
+    }
+
+""" + anchor)
+    anchor = '            UIKeyCommand(input: "\\r", modifierFlags: .command, action: #selector(handleHardwareReturn(_:))),\n'
+    replace(ENGINE_KEYS, anchor, anchor + '            UIKeyCommand(input: "\\r", modifierFlags: .shift, action: #selector(handleHardwareReturn(_:))),\n')
+    anchor = "        if onHardwareReturn?(sender.modifierFlags) ?? true {\n"
+    replace(ENGINE_KEYS, anchor, "        composerHostState.handlingHardwareReturn = true\n        defer { composerHostState.handlingHardwareReturn = false }\n" + anchor)
+    anchor = "            guard !self.isDecidingAtGate, !self.isSettling, !self.isIssuingHostEdit else { return text }\n"
+    replace(ENGINE_GATE, anchor, anchor + '            if text == "\\n", range.length == 0, self.engine.markedTextRange == nil, !self.composerHostState.handlingHardwareReturn, self.onSoftwareReturn?() == false { return nil }\n')
 
     replace(INPUT, "public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate, NSLayoutManagerDelegate, NSTextStorageDelegate {\n",
             "public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate, NSLayoutManagerDelegate, NSTextStorageDelegate {\n"
@@ -69,7 +100,7 @@ def apply_return_key_patches(root):
             "    public var returnKeyType: UIReturnKeyType {\n        get { canvas.returnKeyType }\n        set {\n"
             "            guard canvas.returnKeyType != newValue else { return }\n            canvas.returnKeyType = newValue\n"
             "            if canvas.isFirstResponder { canvas.reloadInputViews() }\n        }\n    }\n")
-    anchor = "    var onHardwareReturn: ((UIKeyModifierFlags) -> Bool)?\n"
+    anchor = "    final var onHardwareReturn: ((UIKeyModifierFlags) -> Bool)?\n"
     replace(CANVAS, anchor, anchor + "    var onSoftwareReturn: (() -> Bool)?\n"
             "    var returnKeyType: UIReturnKeyType = .default\n    private(set) var handlingHardwareReturn = false\n")
     anchor = '         UIKeyCommand(input: "\\r", modifierFlags: .command, action: #selector(handleReturnKey(_:))),\n'
@@ -96,7 +127,7 @@ def apply_return_key_patches(root):
             shouldSendMessage = WhitegramTextSettings.current.sendOnHardwareReturn(
                 hasModifiers: !modifierFlags.isEmpty, commandPressed: modifierFlags.contains(.command), sendWithCommand: commandMode)
 """)
-    anchor = "        self.updateActivity()\n        var cleanText = text\n"
+    anchor = "        self.updateActivity()\n        \n        var cleanText = text\n"
     replace(PANEL, anchor, """        let legacyInput = richTextInputNode.inputView as? ChatInputTextView
         if WhitegramTextSettings.current.sendOnSoftwareReturn(replacement: text, selectionLength: range.length,
             hasMarkedText: legacyInput?.markedTextRange != nil, handlingHardwareReturn: legacyInput?.whitegramHandlingHardwareReturn ?? false),

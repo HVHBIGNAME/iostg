@@ -6,7 +6,7 @@ import TelegramCore
 import SwiftSignalKit
 import AccountContext
 import AvatarComponent
-import ChatListHeaderComponent
+import NavigationBarComponent
 
 final class WhitegramAccountSwitcher {
     private let context: AccountContext
@@ -33,17 +33,18 @@ final class WhitegramAccountSwitcher {
 
     deinit { disposable.dispose(); if let observer { NotificationCenter.default.removeObserver(observer) } }
 
-    var button: AnyComponentWithIdentity<NavigationButtonComponentEnvironment>? {
+    var button: NavigationBarComponent.Button? {
         guard WhitegramPreferences.bool("accountSwitcherEnabled"), let nextContext, let nextPeer else { return nil }
-        return AnyComponentWithIdentity(id: "whitegram-account-switcher", component: AnyComponent(WhitegramAccountSwitcherComponent(context: nextContext, peer: nextPeer, pressed: { [weak self] in
+        let switchAccount: () -> Void = { [weak self] in
             guard let self, WhitegramPreferences.bool("accountSwitcherEnabled"), self.nextContext?.account.id == nextContext.account.id else { return }
             self.context.sharedContext.switchToAccount(id: nextContext.account.id, fromSettingsController: nil, withChatListController: nil)
-        })))
+        }
+        return NavigationBarComponent.Button(id: "whitegram-account-switcher", content: .custom(AnyComponent(WhitegramAccountSwitcherComponent(context: nextContext, peer: nextPeer, pressed: switchAccount))), action: { _ in switchAccount() })
     }
 }
 
 private final class WhitegramAccountSwitcherComponent: Component {
-    typealias EnvironmentType = NavigationButtonComponentEnvironment
+    typealias EnvironmentType = NavigationButtonEnvironment
     let context: AccountContext
     let peer: EnginePeer
     let pressed: () -> Void
@@ -70,9 +71,9 @@ private final class WhitegramAccountSwitcherComponent: Component {
         required init?(coder: NSCoder) { return nil }
         @objc private func pressed() { component?.pressed() }
 
-        func update(component: WhitegramAccountSwitcherComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<NavigationButtonComponentEnvironment>, transition: ComponentTransition) -> CGSize {
+        func update(component: WhitegramAccountSwitcherComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<NavigationButtonEnvironment>, transition: ComponentTransition) -> CGSize {
             self.component = component
-            let theme = environment[NavigationButtonComponentEnvironment.self].value.theme
+            let theme = component.context.sharedContext.currentPresentationData.with { $0.theme }
             let size = CGSize(width: 44, height: availableSize.height)
             let avatarSize = avatar.update(transition: transition, component: AnyComponent(AvatarComponent(context: component.context, theme: theme, peer: component.peer, size: CGSize(width: 28, height: 28))), environment: {}, containerSize: CGSize(width: 28, height: 28))
             if let view = avatar.view {
@@ -89,5 +90,5 @@ private final class WhitegramAccountSwitcherComponent: Component {
         }
     }
     func makeView() -> View { return View(frame: .zero) }
-    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<NavigationButtonComponentEnvironment>, transition: ComponentTransition) -> CGSize { return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition) }
+    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<NavigationButtonEnvironment>, transition: ComponentTransition) -> CGSize { return view.update(component: self, availableSize: availableSize, state: state, environment: environment, transition: transition) }
 }

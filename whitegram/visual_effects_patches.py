@@ -75,7 +75,7 @@ def visual_effects_edits() -> tuple[Edit, ...]:
 ''')
     signature = "    func containerLayoutUpdated(layout: ContainerViewLayout, navigationHeight: CGFloat, transition: ContainedViewLayoutTransition, additive: Bool = false) {\n"
     add("visualProfile", PROFILE, signature, PROFILE_METHOD, prepend=True)
-    add("visualProfile", PROFILE, signature + "        self.validLayout = (layout, navigationHeight)\n", '''        self.whitegramUpdateVisualProfile()
+    add("visualProfile", PROFILE, signature + "        if self.isLentToExpansion {\n            self.layoutHeldDuringExpansion = (layout, navigationHeight)\n            return\n        }\n        self.validLayout = (layout, navigationHeight)\n", '''        self.whitegramUpdateVisualProfile()
         defer { self.whitegramUpdateVisualProfile() }
 ''')
 

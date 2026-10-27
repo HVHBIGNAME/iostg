@@ -18,11 +18,10 @@ SNIPPETS = "submodules/ListMessageItem/Sources/ListMessageSnippetItemNode.swift"
 
 def apply_text_processing_patches(root):
     patches = SourcePatches(root)
-    anchor = "                            let entities: [MessageTextEntity]\n"
-    patches.replace("autoFormatStyle", COMPOSER, anchor, anchor.replace("let entities", "var entities"))
-    anchor = "                            if !entities.isEmpty {\n                                attributes.append(TextEntitiesMessageAttribute(entities: entities))\n"
-    addition = "                            let whitegramOutgoingText = WhitegramTextEntities.outgoing(text: text.string, entities: entities, enabled: !sendWithoutFormatting)\n                            entities = whitegramOutgoingText.entities\n"
-    patches.replace("autoFormatStyle", COMPOSER, anchor, addition + anchor)
+    anchor = "                    for (text, entities) in textMessages.pieces {\n"
+    replacement = "                    for (text, originalEntities) in textMessages.pieces {\n"
+    replacement += "                        let whitegramOutgoingText = WhitegramTextEntities.outgoing(text: text.string, entities: originalEntities, enabled: !sendWithoutFormatting)\n                        let entities = whitegramOutgoingText.entities\n"
+    patches.replace("autoFormatStyle", COMPOSER, anchor, replacement)
     anchor = "messages.append(.message(text: text.string, attributes: attributes, inlineStickers: inlineStickers, mediaReference: mediaReference,"
     patches.replace("autoFormatStyle", COMPOSER, anchor, anchor.replace("text: text.string", "text: whitegramOutgoingText.text"))
 

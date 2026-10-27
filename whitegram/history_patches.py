@@ -94,8 +94,17 @@ def _capture_patches(patches: SourcePatches):
                     }
                 }
                 var resourceIds: [MediaResourceId] = []''')
-    _edit_capture(patches, path, " " * 20, "mediaBox.basePath",
-                  "return .update(message.withUpdatedLocalTags(updatedLocalTags).withUpdatedFlags(updatedFlags).withUpdatedAttributes(updatedAttributes).withUpdatedMedia(updatedMedia))")
+    if "mergedServerMessageUpdate(" in patches.read(path):
+        anchor = "                    return .update(mergedServerMessageUpdate(previous: previousMessage, updated: message))\n"
+        patches.replace("showEditedOriginalText", path, anchor, """                    let whitegramUpdatedMessage = mergedServerMessageUpdate(previous: previousMessage, updated: message)
+                    if previousMessage.text != whitegramUpdatedMessage.text || WhitegramHistoryStore.hasMediaChanges(previousMessage.media, whitegramUpdatedMessage.media) || WhitegramHistoryRuntime.hasEntityChanges(previousMessage, whitegramUpdatedMessage.attributes) {
+                        WhitegramHistoryStore.capture(previousMessage, event: .edited, accountPeerId: accountPeerId, mediaBoxPath: mediaBox.basePath)
+                    }
+                    return .update(WhitegramHistoryRuntime.recordEdit(previous: previousMessage, updated: whitegramUpdatedMessage, accountPeerId: accountPeerId, mediaBoxPath: mediaBox.basePath))
+""")
+    else:
+        _edit_capture(patches, path, " " * 20, "mediaBox.basePath",
+                      "return .update(message.withUpdatedLocalTags(updatedLocalTags).withUpdatedFlags(updatedFlags).withUpdatedAttributes(updatedAttributes).withUpdatedMedia(updatedMedia))")
     deletion = DELETION
     anchor = "    _internal_deleteMessages(transaction: transaction, mediaBox: postbox.mediaBox, ids: messageIds.map(\\.messageId)"
     patches.replace("showDeletedMessages", deletion, anchor, '''    if let accountPeerId = stateManager?.accountPeerId {

@@ -132,9 +132,18 @@ def _tab_size_patches(patches):
          "            let baseItemHeight: CGFloat = component.hideItemTitles ? 44.0 : 56.0\n            let itemHeight = baseItemHeight * component.heightScale\n            let barHeight = (baseItemHeight + innerInset * 2.0) * component.heightScale\n"),
     ):
         replace(patches, "tabBarScale", TAB_COMPONENT, before, after)
-    before = "            containerSize: CGSize(width: params.layout.size.width - sideInset * 2.0, height: 100.0)\n"
-    after = "            containerSize: CGSize(width: (params.layout.size.width - sideInset * 2.0) * CGFloat(WhitegramAppearancePolicy.current.tabWidthPercent / 100.0), height: 100.0)\n"
+    before = "            containerSize: sidePlacement?.frame.size ?? CGSize(width: params.layout.size.width - sideInset * 2.0, height: 100.0)\n"
+    after = "            containerSize: sidePlacement?.frame.size ?? CGSize(width: (params.layout.size.width - sideInset * 2.0) * CGFloat(WhitegramAppearancePolicy.current.tabWidthPercent / 100.0), height: 100.0)\n"
     replace(patches, "tabBarWidthScale", TABS, before, after)
+    before = "            let itemsLayout = tabBarItemsLayout(axis: component.axis, isCompact: component.isCompact || component.hideItemTitles, unboundItemWidths: unboundItemWidths, availableLength: availableLength)\n"
+    after = before.replace("let itemsLayout", "var itemsLayout") + """            if component.axis == .horizontal {
+                itemsLayout.size = CGSize(width: itemsLayout.size.width, height: itemHeight + innerInset * 2.0)
+                for index in itemsLayout.itemFrames.indices {
+                    itemsLayout.itemFrames[index].size.height = itemHeight
+                }
+            }
+"""
+    replace(patches, "tabBarScale", TAB_COMPONENT, before, after)
 
 
 def _folder_patches(patches):

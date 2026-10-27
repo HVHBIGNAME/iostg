@@ -121,7 +121,7 @@ def read_action_patches(patches: SourcePatches) -> None:
         "_internal_applyMaxReadIndexInteractively(transaction: transaction, stateManager: account.stateManager, index: messageIndex)",
         "_internal_applyMaxReadIndexInteractively(transaction: transaction, stateManager: account.stateManager, index: messageIndex, whitegramReadAction: whitegramReadAction)")
     context = UI + "AccountContext.swift"
-    anchor = "    public func applyMaxReadIndex(for location: ChatLocation, contextHolder: Atomic<ChatLocationContextHolder?>, messageIndex: MessageIndex) {\n"
+    anchor = "    public func applyMaxReadIndex(for location: ChatLocation, contextHolder: Atomic<ChatLocationContextHolder?>, messageIndex: EngineMessage.Index) {\n"
     helper = '''    func whitegramLocalReadAction(for location: ChatLocation, contextHolder: Atomic<ChatLocationContextHolder?>, messageIndex: MessageIndex) -> () -> Void {
         switch location {
         case .peer:
@@ -322,7 +322,7 @@ def local_export_patches(patches: SourcePatches) -> None:
 
 def call_patches(patches: SourcePatches) -> None:
     path = UI + "AccountContext.swift"
-    anchor = "    public func requestCall(peerId: PeerId, isVideo: Bool, completion: @escaping () -> Void) {\n"
+    anchor = "    public func requestCall(peerId: EnginePeer.Id, isVideo: Bool, completion: @escaping () -> Void) {\n"
     after = anchor + '''        guard WhitegramContentSettings.warnBeforeCall else {
             self.whitegramRequestConfirmedCall(peerId: peerId, isVideo: isVideo, completion: completion)
             return

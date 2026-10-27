@@ -22,9 +22,9 @@ def apply_online_indicator_patches(root):
            "        self.containerNode.addSubnode(self.whitegramOnlineIndicator)\n")
     append("        self.avatarNode.setCustomLetters(letters, icon: !letters.isEmpty ? nil : .phone)\n",
            "        self.whitegramOnlineIndicator.update(peer: nil, theme: theme)\n")
-    append("    public func updatePeer(peer: Peer) {\n",
+    append("    public func updatePeer(peer enginePeer: EnginePeer) {\n        let peer = enginePeer._asPeer()\n",
            "        self.whitegramOnlineIndicator.update(peer: peer, theme: self.presentationData.theme.theme)\n")
-    append("    public func setPeer(context: AccountContext, theme: PresentationTheme, synchronousLoad: Bool, peer: Peer, authorOfMessage: MessageReference?, emptyColor: UIColor) {\n",
+    append("    public func setPeer(context: AccountContext, theme: PresentationTheme, synchronousLoad: Bool, peer enginePeer: EnginePeer, authorOfMessage: MessageReference?, emptyColor: UIColor) {\n        let peer = enginePeer._asPeer()\n",
            "        self.whitegramOnlineIndicator.update(peer: peer, theme: theme)\n")
     anchor = "    public func updatePresentationData(_ presentationData: ChatPresentationData, context: AccountContext) {\n        if self.presentationData !== presentationData {\n            self.presentationData = presentationData\n"
     append(anchor, "            self.whitegramOnlineIndicator.updateTheme(presentationData.theme.theme)\n")

@@ -182,8 +182,8 @@ def _replace(patches: SourcePatches, path: str, before: str, after: str, *, prev
 def media_camera_patches(patches: SourcePatches) -> None:
     round_camera_choice_patches(patches)
     if "public enum Camera {" in patches.read(CAMERA):
-        _replace(patches, ROUND_SCREEN, "            if useModernVideoMessagePipeline {\n",
-                 "            if useModernVideoMessagePipeline && WhitegramMediaSettings.current.useTelegramCameraSettings && !WhitegramMediaSettings.current.rememberLastCamera {\n")
+        _replace(patches, ROUND_SCREEN, "            switch useModernVideoMessagePipeline ? experimentalSettings.videoMessageCameraMode : .legacy {\n",
+                 "            switch (useModernVideoMessagePipeline && WhitegramMediaSettings.current.useTelegramCameraSettings && !WhitegramMediaSettings.current.rememberLastCamera) ? experimentalSettings.videoMessageCameraMode : .legacy {\n")
     _replace(patches, MEDIA_PICKER,
              '        let highQualityPhoto = UserDefaults.standard.bool(forKey: "TG_photoHighQuality_v0")\n',
              '        let highQualityPhoto = UserDefaults.standard.bool(forKey: "TG_photoHighQuality_v0") || WhitegramMediaSettings.current.alwaysSendHD\n')

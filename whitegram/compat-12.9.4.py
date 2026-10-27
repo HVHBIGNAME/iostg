@@ -100,6 +100,7 @@ from sticker_patches import STICKER_RUNTIME_FILES, apply_sticker_patches
 from swift_syntax_patches import apply_swift_syntax_patches
 from system_patches import SYSTEM_RUNTIME_FILES, apply_system_patches
 from telegram_13_api_patches import apply_telegram_13_api_patches
+from telegram_131_boundaries import apply_module_boundaries
 from text_processing_patches import (
     TEXT_PROCESSING_RUNTIME_FILES,
     apply_text_processing_patches,
@@ -436,4 +437,5 @@ patch_file(
     "            self?.requestLayout(transition: .animated(duration: 0.25, curve: .easeInOut))",
 )
 
+apply_module_boundaries(source_root, patched_sources)
 print(f"Added {import_count} compatibility import(s) and {build_count} BUILD dependency(ies)")

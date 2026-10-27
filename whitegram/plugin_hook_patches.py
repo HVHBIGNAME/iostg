@@ -44,6 +44,9 @@ def plugin_hook_patches(patches: SourcePatches) -> None:
     _replace(patches, "pluginDeleteEvents", state, anchor, anchor.replace("ids: ids,", 'ids: WhitegramPluginHooks.deletingIds(postbox: postbox, transaction: transaction, ids: ids),'))
     updated = "message.withUpdatedLocalTags(updatedLocalTags).withUpdatedFlags(updatedFlags).withUpdatedAttributes(updatedAttributes).withUpdatedMedia(updatedMedia)"
     anchor = "                    var updatedMedia = message.media\n"
+    if "mergedServerMessageUpdate(" in patches.read(state):
+        updated = "mergedServerMessageUpdate(previous: previousMessage, updated: message)"
+        anchor = "                transaction.updateMessage(id, update: { previousMessage in\n"
     _replace(patches, "pluginEditEvents", state, anchor, anchor + f'''                    defer {{
                         WhitegramPluginHooks.edited(postbox: postbox, previous: previousMessage, updated: {updated}, source: "accountState")
                     }}
@@ -118,7 +121,7 @@ private func whitegramPluginEnqueueAcceptedMessages(account: Account, peerId: Pe
         ("requestWithAdditionalInfo<T>(_ data: (FunctionDescription, Buffer, DeserializeFunctionResponse<T>), info: NetworkRequestAdditionalInfo", "NetworkRequestResult<T>"),
         ("request<T>(_ data: (FunctionDescription, Buffer, DeserializeFunctionResponse<T>)", "T"),
     ]:
-        anchor = f"    public func {signature}, tag: NetworkRequestDependencyTag? = nil, automaticFloodWait: Bool = true, onFloodWaitError: ((String) -> Void)? = nil) -> Signal<{result}, MTRpcError> {{\n        let requestService = self.requestService\n"
+        anchor = f"    func {signature}, tag: NetworkRequestDependencyTag? = nil, automaticFloodWait: Bool = true, onFloodWaitError: ((String) -> Void)? = nil) -> Signal<{result}, MTRpcError> {{\n        let requestService = self.requestService\n"
         _replace(patches, "pluginRequestInterception", network, anchor, anchor + f'''        return WhitegramPluginNativeInterception.request(network: self, description: data.0)
         |> mapToSignal {{ _ -> Signal<{result}, MTRpcError> in
 ''')

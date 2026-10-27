@@ -92,10 +92,8 @@ def client_interface_edits() -> tuple[ClientInterfaceEdit, ...]:
     edit("newChatListUI", item, anchor, "                    let whitegramBackgroundColor = whitegramCards && backgroundColor == .clear ? item.presentationData.theme.list.itemBlocksBackgroundColor : backgroundColor\n" + anchor.replace("color: backgroundColor)", "color: whitegramBackgroundColor)"))
     anchor = "                        strongSelf.backgroundNode.backgroundColor = backgroundColor\n"
     edit("newChatListUI", item, anchor, "                        strongSelf.backgroundNode.backgroundColor = whitegramBackgroundColor\n")
-    anchor = "                    transition.updateCornerRadius(node: strongSelf.highlightedBackgroundNode, cornerRadius: strongSelf.isRevealOptionsActive ? 26.0 : 0.0)\n"
-    edit("newChatListUI", item, anchor, """                    if whitegramCards { strongSelf.highlightedBackgroundNode.frame = whitegramCardFrame.offsetBy(dx: strongSelf.revealOffset, dy: 0.0) }
-                    transition.updateCornerRadius(node: strongSelf.highlightedBackgroundNode, cornerRadius: strongSelf.isRevealOptionsActive ? 26.0 : (whitegramCards ? 12.0 : 0.0))
-""")
+    anchor = "                    strongSelf.updateRevealOptionsHighlightedBackgroundFrame(strongSelf.highlightedBackgroundNode, frame: CGRect(origin: CGPoint(x: params.leftInset, y: layoutOffset - separatorHeight - topNegativeInset), size: CGSize(width: layout.contentSize.width - params.leftInset - params.rightInset, height: layout.contentSize.height + separatorHeight + topNegativeInset)), aboveNodes: [strongSelf.separatorNode, strongSelf.backgroundNode])\n"
+    edit("newChatListUI", item, anchor, anchor.replace("frame: CGRect(", "frame: whitegramCards ? whitegramCardFrame : CGRect("))
     # A new presentation identity makes the list diff update recycled rows even when only a flag changed.
     node = LIST + "ChatListNode.swift"
     anchor = "            combineLatest(self.statePromise.get(), WhitegramAppearanceSettings.signal()) |> map { value, _ in value },\n"

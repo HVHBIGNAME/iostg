@@ -153,7 +153,7 @@ class AccountPatchTests(unittest.TestCase):
             "submodules/TelegramCore/Sources/Account/Account.swift": ["public func accountBackupData(postbox: Postbox)", "backupData: AccountBackupData?", "shouldKeepAutoConnection: Bool = true", "public let auxiliaryMethods: AccountAuxiliaryMethods"],
             "submodules/TelegramCore/Sources/AccountManager/AccountManagerImpl.swift": ["public let getRecords:", "public let updateRecord:", "public let temporarySessionId: Int64"],
             "submodules/TelegramCore/Sources/TelegramEngine/Auth/AuthTransfer.swift": [".authorization(authorizationData)", "authorizationData.user"],
-            "submodules/TelegramApi/Sources/Api43.swift": ["static func importBotAuthorization(flags: Int32, apiId: Int32, apiHash: String, botAuthToken: String)", "static func getUsers(id: [Api.InputUser])"],
+            "submodules/TelegramApi/swift_scheme.tl": ["auth.importBotAuthorization#67a3ff2c flags:int api_id:int api_hash:string bot_auth_token:string = auth.Authorization;", "users.getUsers#d91a548 id:Vector<InputUser> = Vector<User>;"],
             "submodules/TelegramCore/Sources/UpdatePeers.swift": ["func updatePeers(transaction: Transaction, accountPeerId: PeerId, peers: AccumulatedPeers)"],
             "submodules/AccountContext/Sources/AccountContext.swift": ["var activeAccountsWithInfo:", "func switchToAccount(id: AccountRecordId"],
         }

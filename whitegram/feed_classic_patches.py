@@ -45,7 +45,7 @@ def feed_classic_edits() -> tuple[FeedClassicEdit, ...]:
     anchor = "        self.presentationDataDisposable = (context.sharedContext.presentationData\n"
     edit("showPostsFeed", root, anchor, """        self.whitegramFeedObserver = NotificationCenter.default.addObserver(forName: WhitegramPreferences.updatedNotification, object: nil, queue: .main) { [weak self] _ in
             guard let self, self.whitegramFeed.needsUpdate else { return }
-            self.updateRootControllers(showCallsTab: self.currentShowCallsTab)
+            self.updateRootControllers(showCallsTab: self.currentShowCallsTab, showNewsTab: self.currentShowNewsTab)
         }
 """ + anchor)
     anchor = "        self.permissionsDisposable?.dispose()\n"
@@ -63,9 +63,12 @@ def feed_classic_edits() -> tuple[FeedClassicEdit, ...]:
             self.whitegramAppearanceUpdated?()
         }
 """ + anchor)
-    anchor = "        let tabBarFrame = CGRect(origin: CGPoint(x: tabBarX, y: params.layout.size.height - (self.tabBarHidden ? 0.0 : (tabBarSize.height + tabBarBottomInset))), size: tabBarSize)\n"
-    edit("classic-tabs", node, anchor, """        let classicHeight = CGFloat(WhitegramClassicStyle.tabHeight(landscape: !params.layout.safeInsets.left.isZero, safeBottom: Double(params.layout.insets(options: []).bottom)))
-        let tabBarFrame = WhitegramClassicStyle.enabled
+    anchor = "        let tabBarFrame: CGRect\n"
+    edit("classic-tabs", node, anchor, "        let classicHeight = CGFloat(WhitegramClassicStyle.tabHeight(landscape: !params.layout.safeInsets.left.isZero, safeBottom: Double(params.layout.insets(options: []).bottom)))\n" + anchor)
+    anchor = "        if let sidePlacement {\n            tabBarFrame = self.tabBarHidden ? sidePlacement.hiddenFrame(containerWidth: params.layout.size.width) : sidePlacement.frame\n"
+    edit("classic-tabs", node, anchor, anchor.replace("if let sidePlacement {", "if let sidePlacement, !WhitegramClassicStyle.enabled {"))
+    anchor = "            tabBarFrame = CGRect(origin: CGPoint(x: tabBarX, y: params.layout.size.height - (self.tabBarHidden ? 0.0 : (tabBarSize.height + tabBarBottomInset))), size: tabBarSize)\n"
+    edit("classic-tabs", node, anchor, """            tabBarFrame = WhitegramClassicStyle.enabled
             ? CGRect(x: 0, y: params.layout.size.height - (self.tabBarHidden ? 0 : classicHeight), width: params.layout.size.width, height: classicHeight)
             : CGRect(origin: CGPoint(x: tabBarX, y: params.layout.size.height - (self.tabBarHidden ? 0.0 : (tabBarSize.height + tabBarBottomInset))), size: tabBarSize)
 """)
@@ -99,34 +102,31 @@ def feed_classic_edits() -> tuple[FeedClassicEdit, ...]:
     anchor = "        if replacement == .telegram, self.legacyView != nil { replacement = .system }\n"
     edit("classic-material", glass, anchor, anchor + "        if WhitegramClassicStyle.enabled { replacement = UIAccessibility.isReduceTransparencyEnabled ? .color : .blur }\n")
 
-    nav = COMPONENTS + "NavigationBarImpl/Sources/NavigationBarImpl.swift"
-    anchor = "    private var requestedLayout: Bool = false\n"
+    nav = COMPONENTS + "NavigationBarNode/Sources/NavigationBarNode.swift"
+    anchor = "    private var requestedLayout = false\n"
     edit("classic-header", nav, anchor, anchor + "    private let whitegramClassicPlate = WhitegramClassicPlate(frame: .zero)\n    private var whitegramClassicObserver: WhitegramClassicObserver?\n")
-    anchor = "        super.init()\n        \n        if case .glass = presentationData.theme.style {\n"
-    edit("classic-header", nav, anchor, """        super.init()
-        self.view.insertSubview(self.whitegramClassicPlate, at: 0)
+    anchor = "        self.backdropHost.addSubview(self.edgeEffectViewImpl)\n"
+    edit("classic-header", nav, anchor, """        self.backdropHost.addSubview(self.whitegramClassicPlate)
         self.whitegramClassicObserver = WhitegramClassicObserver { [weak self] in
             self?.requestLayout()
             self?.requestContainerLayout?(.immediate)
         }
-       \x20
-        if case .glass = presentationData.theme.style {
-""")
-    anchor = "        self.validLayout = (size, defaultHeight, additionalTopHeight, additionalContentHeight, additionalBackgroundHeight, additionalCutout, leftInset, rightInset, appearsHidden, isLandscape)\n"
-    edit("classic-header", nav, anchor, anchor + """        self.whitegramClassicPlate.frame = CGRect(x: 0, y: 0, width: size.width, height: size.height + additionalBackgroundHeight)
+""" + anchor)
+    anchor = "        let backgroundFrame = CGRect(origin: CGPoint(), size: CGSize(width: size.width, height: size.height + layout.additionalBackgroundHeight))\n"
+    edit("classic-header", nav, anchor, anchor + """        self.whitegramClassicPlate.frame = backgroundFrame
         self.whitegramClassicPlate.update(size: self.whitegramClassicPlate.bounds.size, color: self.presentationData.theme.opaqueBackgroundColor,
-            separatorColor: self.presentationData.theme.separatorColor, separatorAtTop: false, enabled: WhitegramClassicStyle.enabled && !appearsHidden, transition: transition)
+            separatorColor: self.presentationData.theme.separatorColor, separatorAtTop: false, enabled: WhitegramClassicStyle.enabled && !layout.appearsHidden, transition: transition)
 """)
-    anchor = "        let nominalHeight: CGFloat = 60.0\n"
-    edit("classic-header", nav, anchor, "        let nominalHeight: CGFloat = WhitegramClassicStyle.enabled ? 44.0 : 60.0\n")
+    anchor = "    private static let nominalHeight: CGFloat = 60.0\n"
+    edit("classic-header", nav, anchor, "    private static var nominalHeight: CGFloat { WhitegramClassicStyle.enabled ? 44.0 : 60.0 }\n")
     anchor = "    public func contentHeight(defaultHeight: CGFloat) -> CGFloat {\n"
     edit("classic-header", nav, anchor, anchor + "        let defaultHeight = CGFloat(WhitegramClassicStyle.navigationHeight(original: Double(defaultHeight)))\n")
 
     listing = COMPONENTS + "ChatListHeaderComponent/Sources/ChatListNavigationBar.swift"
     anchor = "        private let edgeEffectView: EdgeEffectView\n"
     edit("classic-chat-list-header", listing, anchor, anchor + "        private let whitegramClassicPlate = WhitegramClassicPlate(frame: .zero)\n        private var whitegramClassicObserver: WhitegramClassicObserver?\n")
-    anchor = "            self.addSubview(self.edgeEffectView)\n"
-    edit("classic-chat-list-header", listing, anchor, """            self.addSubview(self.whitegramClassicPlate)
+    anchor = "            self.contentView.addSubview(self.edgeEffectView)\n"
+    edit("classic-chat-list-header", listing, anchor, """            self.contentView.addSubview(self.whitegramClassicPlate)
             self.whitegramClassicObserver = WhitegramClassicObserver { [weak self] in self?.state?.updated(transition: .immediate) }
 """ + anchor)
     anchor = "            self.edgeEffectView.isHidden = !component.hasEdgeEffect\n"

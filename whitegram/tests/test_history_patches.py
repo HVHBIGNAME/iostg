@@ -102,7 +102,9 @@ class HistoryPatchTests(unittest.TestCase):
         report = apply_history_patches(root)
         self.assertEqual(set(root.writes), set(PATHS))
         self.assertEqual(report["messageHistoryContextMenu"], [MENU])
-        self.assertEqual(root.text(STATE).count(MEDIA_GUARD), 1)
+        state = root.text(STATE)
+        self.assertEqual(state.count("WhitegramHistoryStore.hasMediaChanges(previousMessage.media, whitegramUpdatedMessage.media)"), 1)
+        self.assertLess(state.index("let whitegramUpdatedMessage = mergedServerMessageUpdate("), state.index("WhitegramHistoryRuntime.recordEdit(previous: previousMessage, updated: whitegramUpdatedMessage"))
         self.assertEqual(root.text(EDIT).count(MEDIA_GUARD), 4)
 
     def test_second_pass_is_byte_identical_without_writes(self):

@@ -344,9 +344,8 @@ def _patch_profile_card(patches: SourcePatches) -> None:
     patches.replace(feature, PROFILE, "        let musicHeight: CGFloat = hasBackground || self.isAvatarExpanded ? 24.0 : 16.0\n", """        let whitegramCustomMusicCard = WhitegramPlayerSettings(values: WhitegramPreferences.values()).customMusicCard
         let musicHeight: CGFloat = whitegramCustomMusicCard ? 52.0 : (hasBackground || self.isAvatarExpanded ? 24.0 : 16.0)
 """)
-    patches.replace(feature, PROFILE, """                if additive {
-                    musicTransition.updateFrameAdditiveToCenter(view: musicView, frame: musicFrame)
-""", """                if whitegramCustomMusicCard {
+    anchor = "                if let musicView = music.view {\n"
+    patches.replace(feature, PROFILE, anchor, anchor + """                if whitegramCustomMusicCard {
                     let card = self.whitegramMusicCard ?? WhitegramPlayerProfileCard(frame: .zero)
                     self.whitegramMusicCard = card
                     if card.superview !== musicView { musicView.insertSubview(card, at: 0) }
@@ -356,8 +355,6 @@ def _patch_profile_card(patches: SourcePatches) -> None:
                     self.whitegramMusicCard?.removeFromSuperview()
                     self.whitegramMusicCard = nil
                 }
-                if additive {
-                    musicTransition.updateFrameAdditiveToCenter(view: musicView, frame: musicFrame)
 """)
     patches.replace(feature, PROFILE, """            if let music = self.music {
                 self.music = nil

@@ -22,16 +22,16 @@ permissions:
 jobs:
   build:
     name: WhiteGram ${{ matrix.source_version }}
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 360
     strategy:
       fail-fast: false
       matrix:
         include:
-          - source_version: release-13.0.0
-            source_revision: f1dd7a2dbd02cbbf513e75d5695d8d36d1cf5838
-            app_version: "13.0"
-            app_build: "34652"
+          - source_version: release-13.1.1
+            source_revision: fb0e62ba8a147f0821da6aa63c09da7d79a10111
+            app_version: "13.1.1"
+            app_build: "34653"
 
     steps:
       - name: Checkout build repository

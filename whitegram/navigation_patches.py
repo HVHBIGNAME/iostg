@@ -60,15 +60,15 @@ def navigation_edits() -> tuple[NavigationEdit, ...]:
     anchor = "            self.whiteGramTabSettingsObserver = NotificationCenter.default.addObserver(forName: WhiteGramTabSettings.updatedNotification, object: nil, queue: .main, using: { [weak self] _ in\n"
     edit("navigation-live-refresh", root, anchor, """            self.whitegramNavigationObserver = NotificationCenter.default.addObserver(forName: WhitegramPreferences.updatedNotification, object: nil, queue: .main) { [weak self] _ in
                 guard let self, self.whitegramNavigation.needsUpdate else { return }
-                self.updateRootControllers(showCallsTab: self.currentShowCallsTab)
+                self.updateRootControllers(showCallsTab: self.currentShowCallsTab, showNewsTab: self.currentShowNewsTab)
             }
 """ + anchor)
     anchor = "        self.permissionsDisposable?.dispose()\n"
     edit("navigation-live-refresh", root, anchor, "        if let observer = self.whitegramNavigationObserver { NotificationCenter.default.removeObserver(observer) }\n" + anchor)
-    anchor = "        tabBarController.setControllers(controllers, selectedIndex: restoreSettignsController != nil ? (controllers.count - 1) : (controllers.count - 2))\n"
+    anchor = "        tabBarController.setControllers(controllers, selectedIndex: restoreSettignsController != nil ? (controllers.count - 1) : chatsIndex)\n"
     edit("separateProfileTab", root, anchor, "        self.whitegramNavigation.apply(to: tabBarController, base: controllers, preferred: restoreSettignsController != nil ? accountSettingsController : chatListController, chats: chatListController, parent: self)\n")
-    anchor = "        rootTabController.setControllers(controllers, selectedIndex: nil)\n"
-    edit("separateProfileTab", root, anchor, "        self.whitegramNavigation.apply(to: rootTabController, base: controllers, preferred: nil, chats: self.chatListController!, parent: self)\n")
+    anchor = "        rootTabController.setControllers(controllers, selectedIndex: selectedIndex)\n"
+    edit("separateProfileTab", root, anchor, "        self.whitegramNavigation.apply(to: rootTabController, base: controllers, preferred: selectedIndex.map { controllers[$0] }, chats: self.chatListController!, parent: self)\n")
     # Existing deep links still target Settings explicitly, even with two PeerInfo tabs.
     anchor = "        if let index = rootTabController.controllers.firstIndex(where: { $0 is PeerInfoScreenImpl }) {\n"
     # Two intentionally distinct surrounding anchors, one for icon settings and one for edit settings.
@@ -95,9 +95,9 @@ def navigation_edits() -> tuple[NavigationEdit, ...]:
     edit("hideBottomTabBar", tabs, anchor, "        self.tabBarControllerNode.tabBarHidden = self.whitegramRequestedTabBarHidden || self.whitegramPersistentTabBarHidden\n" + anchor)
     anchor = "                    updatedLayout.intrinsicInsets.bottom = tabBarHeight\n"
     edit("hideBottomTabBar", tabs, anchor, "                    if !strongSelf.tabBarControllerNode.tabBarHidden { updatedLayout.intrinsicInsets.bottom = tabBarHeight }\n")
-    anchor = "            if !self.tabBarControllerNode.tabBarHidden {\n                updatedLayout.intrinsicInsets.bottom = bottomInset\n"
-    edit("hideBottomTabBar", tabs, anchor, "            if !self.tabBarControllerNode.tabBarHidden || currentController.toolbar != nil {\n                updatedLayout.intrinsicInsets.bottom = bottomInset\n")
-    anchor = "            currentController.containerLayoutUpdated(updatedLayout, transition: transition)\n        }\n    }\n\n    public func updateControllerLayout(controller: ViewController) {\n"
+    anchor = "            if !self.tabBarControllerNode.tabBarHidden, let bottomInset {\n                updatedLayout.intrinsicInsets.bottom = bottomInset\n"
+    edit("hideBottomTabBar", tabs, anchor, "            if (!self.tabBarControllerNode.tabBarHidden || currentController.toolbar != nil), let bottomInset {\n                updatedLayout.intrinsicInsets.bottom = bottomInset\n")
+    anchor = "            currentController.containerLayoutUpdated(updatedLayout, transition: transition)\n        }\n    }\n    \n    public func updateControllerLayout(controller: ViewController) {\n"
     edit("hidden-tab-access", tabs, anchor, """            currentController.containerLayoutUpdated(updatedLayout, transition: transition)
         }
         self.whitegramTabAccess.update(host: self.displayNode.view, layout: layout, controllers: self.controllers, selected: self.selectedIndex,
@@ -114,7 +114,7 @@ def navigation_edits() -> tuple[NavigationEdit, ...]:
             tabBarComponentView.accessibilityElementsHidden = self.tabBarHidden
             tabBarComponentView.isUserInteractionEnabled = !self.tabBarHidden && !isCompactSearchActive
 """)
-    anchor = "        transition.updateFrame(node: self.disabledOverlayNode, frame: tabBarFrame)\n"
+    anchor = "        tabBarFrameTransition.updateFrame(node: self.disabledOverlayNode, frame: tabBarFrame)\n"
     edit("hideBottomTabBar", node, anchor, "        self.disabledOverlayNode.isHidden = self.tabBarHidden\n" + anchor)
     anchor = "        if isCompactSearchActive {\n            return panelsBottomInset\n"
     edit("hideBottomTabBar", node, anchor, """        if self.tabBarHidden {

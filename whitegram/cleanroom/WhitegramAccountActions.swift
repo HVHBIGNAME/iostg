@@ -2,7 +2,6 @@ import Foundation
 import UIKit
 import UniformTypeIdentifiers
 import Display
-import Postbox
 import SwiftSignalKit
 import TelegramCore
 import AccountContext

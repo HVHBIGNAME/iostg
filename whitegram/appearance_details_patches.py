@@ -34,8 +34,8 @@ def apply_appearance_details_patches(root):
             "                    expandablePart += 99.0\n", "                    expandablePart += 99.0 + (buttonKeys.isEmpty ? 0.0 : actionRowHeight - 58.0)\n")
     for name, keys in (("actionButtonWidth", "actionButtonKeys"), ("buttonWidth", "buttonKeys")):
         replace(patches, "profileButtonFiniteLayout", HEADER,
-                f"let {name} = (width - buttonSideInset * 2.0 + buttonSpacing) / CGFloat({keys}.count) - buttonSpacing",
-                f"let {name} = WhitegramAppearancePolicy.profileActionButtonWidth(width: width, inset: buttonSideInset, spacing: buttonSpacing, count: {keys}.count)")
+                f"let {name} = (width - stripLeft - stripRight - buttonSideInset * 2.0 + buttonSpacing) / CGFloat({keys}.count) - buttonSpacing",
+                f"let {name} = WhitegramAppearancePolicy.profileActionButtonWidth(width: width - stripLeft - stripRight, inset: buttonSideInset, spacing: buttonSpacing, count: {keys}.count)")
     replace(patches, "roundProfileActionButtons", HEADER,
             "let buttonSize = CGSize(width: buttonWidth, height: 58.0)", "let buttonSize = CGSize(width: buttonWidth, height: actionRowHeight)")
     return patches.write()

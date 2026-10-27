@@ -31,7 +31,7 @@ ACCOUNTS_RUNTIME_FILES = {
 
 ACCOUNTS_REQUIRED_DEPENDENCIES = {
     "submodules/TelegramCore/BUILD": ["//submodules/sqlcipher:sqlcipher"],
-    "submodules/ChatListUI/BUILD": ["//submodules/TelegramUI/Components/AvatarComponent", "//submodules/TelegramUI/Components/ChatListHeaderComponent"],
+    "submodules/ChatListUI/BUILD": ["//submodules/TelegramUI/Components/AvatarComponent", "//submodules/TelegramUI/Components/NavigationBarComponent"],
 }
 
 
@@ -108,7 +108,7 @@ def _retention(patches: SourcePatches):
 
 def _switcher(patches: SourcePatches):
     feature = "accountSwitcherEnabled"
-    anchor = "    var rightButton: AnyComponentWithIdentity<NavigationButtonComponentEnvironment>?\n"
+    anchor = "    var rightButton: NavigationBarComponent.Button?\n"
     patches.replace(feature, CHAT, anchor, anchor + "    private var whitegramAccountSwitcher: WhitegramAccountSwitcher?\n")
     anchor = "        self.parentController = parentController\n        \n        let hasProxy = context.sharedContext.accountManager.sharedData"
     patches.replace(feature, CHAT, anchor, """        self.parentController = parentController

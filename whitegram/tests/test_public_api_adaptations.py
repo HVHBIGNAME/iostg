@@ -371,7 +371,7 @@ class AssembledSourceTests(unittest.TestCase):
         self.assertLess(source.index("guard let passkey = self.passkeysData?.first(where:"), source.index("self.passkeysData?.removeAll"))
         self.assertIn("decodeBase64(passkey.id)", source)
         auth = self.upstream("submodules/TelegramCore/Sources/TelegramEngine/Auth/TelegramEngineAuth.swift")
-        self.assertIn("public func deletePasskey(id: String) -> Signal<Never, NoError>", auth)
+        self.assertIn("public func deletePasskey(id: String) -> Signal<Bool, NoError>", auth)
 
     def test_real_tab_bar_options_and_peer_info_callbacks_are_present(self):
         tab_bar = (self.root / "submodules/TelegramUI/Components/TabBarComponent/Sources/TabBarComponent.swift").read_text(encoding="utf-8")
