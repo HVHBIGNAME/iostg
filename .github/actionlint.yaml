@@ -1,0 +1,4 @@
+# Existing runner label, confirmed by build run 40428640490.
+self-hosted-runner:
+  labels:
+    - xcode-27

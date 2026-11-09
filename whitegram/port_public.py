@@ -11,8 +11,10 @@ import tempfile
 from pathlib import Path
 
 from public_resolutions import resolve
-from public_resolutions_13 import REVISION as TELEGRAM_13_REVISION, resolve_13
-from public_resolutions_131 import REVISION as TELEGRAM_131_REVISION, resolve_131
+from public_resolutions_13 import REVISION as TELEGRAM_13_REVISION
+from public_resolutions_13 import resolve_13
+from public_resolutions_131 import SUPPORTED_REVISIONS as TELEGRAM_131_REVISIONS
+from public_resolutions_131 import resolve_131
 
 PUBLIC_REF = "db18308774f863074278feedc4df4507b0fb174e"
 BASE_REF = "release-12.6.2"
@@ -130,7 +132,9 @@ def conflict_review(relative: str, merged: str) -> str:
 
 
 def resolver_for_revision(revision: str):
-    return {TELEGRAM_13_REVISION: resolve_13, TELEGRAM_131_REVISION: resolve_131}.get(revision, resolve)
+    if revision in TELEGRAM_131_REVISIONS:
+        return resolve_131
+    return resolve_13 if revision == TELEGRAM_13_REVISION else resolve
 
 
 def port(source: Path, public: Path, report: Path, resolutions: Path, apply: bool) -> int:
@@ -171,15 +175,13 @@ def port(source: Path, public: Path, report: Path, resolutions: Path, apply: boo
         elif relative == "submodules/TranslateUI/Sources/TranslateButtonComponent.swift" and current is None and incoming is not None:
             pending[path] = incoming
             entry["status"] = "restored-translation-component"
-        elif (revision == TELEGRAM_131_REVISION
+        elif (revision in TELEGRAM_131_REVISIONS
               and relative == "submodules/TelegramUI/Components/ChatListHeaderComponent/Sources/NavigationButtonComponent.swift"
               and current is None and base is not None and incoming is not None):
             # Its only fork behavior was the folder glyph. The reviewed ChatListController
             # resolution now supplies that action through NavigationBarComponent.Button.
             entry["status"] = "migrated-navigation-folder-button"
-        elif base is None or current is None or incoming is None:
-            entry["status"] = "conflict"
-        elif b"\0" in base + incoming + current:
+        elif base is None or current is None or incoming is None or b"\0" in base + incoming + current:
             entry["status"] = "conflict"
         else:
             try:

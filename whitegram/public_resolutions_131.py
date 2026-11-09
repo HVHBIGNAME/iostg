@@ -1,4 +1,4 @@
-"""Reviewed public overlay conflicts against Telegram fb0e62b (13.1.1)."""
+"""Reviewed public overlay conflicts against the pinned Telegram 13.1.x releases."""
 
 import re
 from pathlib import PurePosixPath
@@ -7,6 +7,8 @@ from public_resolutions import replace_once
 from public_resolutions_13 import resolve_13
 
 REVISION = "fb0e62ba8a147f0821da6aa63c09da7d79a10111"
+REVISION_1312 = "279f89e4d4f63f17227bf877dc3d8990f22ecd58"
+SUPPORTED_REVISIONS = (REVISION, REVISION_1312)
 COUNTS = {
     "BUILD": 1,
     "ChatListController.swift": 6,

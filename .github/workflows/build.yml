@@ -28,10 +28,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - source_version: release-13.1.1
-            source_revision: fb0e62ba8a147f0821da6aa63c09da7d79a10111
-            app_version: "13.1.1"
-            app_build: "34653"
+          - source_version: release-13.1.2
+            source_revision: 279f89e4d4f63f17227bf877dc3d8990f22ecd58
+            app_version: "13.1.2"
+            app_build: "34654"
 
     steps:
       - name: Checkout build repository
@@ -98,6 +98,7 @@ jobs:
           WHITEGRAM_VOICE_SOURCE: /Users/Shared/telegram-ios
           WHITEGRAM_VOICE_PUBLIC_SOURCE: /Users/Shared/whitegram-public
           WHITEGRAM_PLAYER_SOURCE: /Users/Shared/telegram-ios
+          WHITEGRAM_FEED_SOURCE: /Users/Shared/telegram-ios
           WHITEGRAM_ALTICON_TOOL: /Users/Shared/telegram-ios/build-system/bazel-rules/rules_apple/tools/alticonstool/alticonstool.py
         run: |
           set -euo pipefail
@@ -186,6 +187,7 @@ jobs:
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot="$bazel_user_root" \
             --cacheDir=/Users/Shared/whitegram-bazel-cache \
+            --bazelArguments=--experimental_ui_max_stdouterr_bytes=16777216 \
             build \
             --continueOnError \
             --configurationPath=build-system/appstore-configuration.json \
@@ -277,6 +279,7 @@ jobs:
           python3 -u build-system/Make/Make.py \
             --bazelUserRoot=/private/var/tmp/_bazel_containerhost \
             --cacheDir=/Users/Shared/whitegram-bazel-cache \
+            --bazelArguments=--experimental_ui_max_stdouterr_bytes=16777216 \
             build \
             --continueOnError \
             --configurationPath=build-system/appstore-configuration.json \
@@ -303,6 +306,15 @@ jobs:
           path: ${{ runner.temp }}/whitegram-simulator-launch/
           if-no-files-found: warn
           retention-days: 30
+
+      - name: Upload compiler diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhiteGram-compiler-diagnostics-${{ github.sha }}
+          path: /private/var/tmp/_bazel_containerhost/**/execroot/_main/bazel-out/_tmp/actions/stderr-*
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Save Bazel disk cache
         if: always() && steps.bazel_cache.outcome == 'success' && steps.bazel_cache.outputs.cache-hit != 'true'

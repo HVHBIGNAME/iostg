@@ -4,7 +4,6 @@ from pathlib import Path
 
 from source_patches import SourcePatches
 
-
 SYSTEM_RUNTIME_FILES = {
     **{name + ".swift": "submodules/Display/Source/" + name + ".swift" for name in (
         "WhitegramRAMUsage", "WhitegramRAMUsageOverlay",
@@ -32,13 +31,16 @@ def _replace_once(patches: SourcePatches, feature: str, path: str, before: str, 
 
 
 def ram_patches(patches: SourcePatches) -> None:
+    legacy = "leftInset: self.windowLayout.safeInsets.left)"
+    if legacy in patches.read(WINDOW):
+        patches.replace("showRAMUsage", WINDOW, legacy, "leftInset: self.windowLayout.reservedArea.safeInsets.left)")
     _replace_once(patches, "showRAMUsage", WINDOW,
         "    public let badgeView: UIImageView\n",
         "    public let badgeView: UIImageView\n    private var whitegramRAMUsage: WhitegramRAMUsageOverlay?\n")
     anchor = "        self.hostView.containerView.addSubview(self.badgeView)\n"
     _replace_once(patches, "showRAMUsage", WINDOW, anchor, anchor + """        if self.statusBarHost != nil {
             self.whitegramRAMUsage = WhitegramRAMUsageOverlay(hostView: self.hostView.containerView,
-                statusBarHeight: self.windowLayout.statusBarHeight ?? 0.0, leftInset: self.windowLayout.safeInsets.left)
+                statusBarHeight: self.windowLayout.statusBarHeight ?? 0.0, leftInset: self.windowLayout.reservedArea.safeInsets.left)
         }
 """)
     anchor = "                self.updatedContainerLayout = childLayout\n"

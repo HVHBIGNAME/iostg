@@ -1,6 +1,9 @@
 # Telegram 13.1.1 migration
 
-Candidate build: **34653**. Device IPA and simulator verification are pending.
+Candidate build: **34653**. [Run 40428640490](https://github.com/HVHBIGNAME/iostg/actions/runs/40428640490)
+failed in Display and TelegramCore compilation; this candidate did not produce a
+verified IPA. The Display RAM-hook fix and expanded compiler diagnostics are now
+included in [the 13.1.2 candidate](UPGRADE_13_1_2.md), build **34654**.
 The verified download remains build 34652 until the new build passes.
 
 ## Inputs

@@ -1,22 +1,27 @@
 import copy
 import os
-from pathlib import Path
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from feed_classic_patches import (
+    RUNTIME_FILES,
+    apply_feed_classic_patches,
+    feed_classic_edits,
+    feed_classic_patches,
+)
+from navigation_patches import navigation_edits, navigation_patches
 from source_patches import SourcePatches
-from navigation_patches import navigation_patches, navigation_edits
-from feed_classic_patches import feed_classic_patches, feed_classic_edits, apply_feed_classic_patches, RUNTIME_FILES
 
 
 class FeedClassicTests(unittest.TestCase):
     def setUp(self):
         source = os.environ.get("WHITEGRAM_FEED_SOURCE")
         if not source:
-            self.skipTest("Set WHITEGRAM_FEED_SOURCE to the read-only assembled 13.0 tree")
+            self.skipTest("Set WHITEGRAM_FEED_SOURCE to the read-only assembled Telegram tree")
         self.scratch = tempfile.TemporaryDirectory(prefix="feed-classic-", dir=os.environ.get("WHITEGRAM_FEED_SCRATCH"))
         self.addCleanup(self.scratch.cleanup)
         self.root = Path(self.scratch.name)
@@ -29,6 +34,13 @@ class FeedClassicTests(unittest.TestCase):
             path.write_bytes(data)
         self.patches = SourcePatches(self.root)
         navigation_patches(self.patches)
+        # Assembled inputs already contain this stage. Rewind only its staged hooks.
+        for edit in reversed(feed_classic_edits()):
+            value = self.patches.read(edit.path)
+            installed = value.count(edit.after)
+            if installed:
+                self.assertEqual(installed, edit.count)
+                self.patches.pending[edit.path] = value.replace(edit.after, edit.before)
 
     def test_full_navigation_feed_classic_replay(self):
         feed_classic_patches(self.patches)

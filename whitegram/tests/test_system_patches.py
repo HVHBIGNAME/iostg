@@ -2,21 +2,29 @@
 
 import os
 import plistlib
-from pathlib import Path
+import subprocess
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-from tree_sitter import Language, Parser
 import tree_sitter_swift
-
+from tree_sitter import Language, Parser
 
 OVERLAY = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(OVERLAY))
+from public_resolutions_131 import REVISION
 from source_patches import SourcePatches
 from system_patches import (
-    APPLICATION_CONTEXT, APP_DELEGATE, SYSTEM_RUNTIME_FILES, WAKEUP, WINDOW,
-    apply_system_patches, background_patches, notification_patches, ram_patches,
+    APP_DELEGATE,
+    APPLICATION_CONTEXT,
+    SYSTEM_RUNTIME_FILES,
+    WAKEUP,
+    WINDOW,
+    apply_system_patches,
+    background_patches,
+    notification_patches,
+    ram_patches,
 )
 
 
@@ -88,6 +96,27 @@ class SystemCompositionTests(unittest.TestCase):
         self.assertEqual(staged.pending[WINDOW].count("self.whitegramRAMUsage = WhitegramRAMUsageOverlay("), 1)
         self.assertEqual(staged.pending[APPLICATION_CONTEXT].count("self.whitegramLocalNotifications = WhitegramLocalNotifications("), 1)
         self.assertEqual(staged.pending[APP_DELEGATE].count("self.whitegramBackgroundKeepAlive = WhitegramBackgroundKeepAlive("), 1)
+
+    def test_ram_hook_installs_on_upstream_and_upgrades_previous_installation(self):
+        upstream = subprocess.check_output(
+            ["git", "-C", str(self.root), "show", f"{REVISION}:{WINDOW}"],
+        ).decode("utf-8")
+        staged = SourcePatches(self.root)
+        staged.original[WINDOW] = upstream
+        staged.pending[WINDOW] = upstream
+        ram_patches(staged)
+        installed = staged.pending[WINDOW]
+        current = "leftInset: self.windowLayout.reservedArea.safeInsets.left)"
+        legacy = "leftInset: self.windowLayout.safeInsets.left)"
+        self.assertEqual(installed.count(current), 1)
+        self.assertNotIn(legacy, installed)
+        for previous in (installed, installed.replace(current, legacy)):
+            with self.subTest(upgrade=legacy in previous):
+                staged.pending[WINDOW] = previous
+                ram_patches(staged)
+                self.assertEqual(staged.pending[WINDOW], installed)
+                ram_patches(staged)
+                self.assertEqual(staged.pending[WINDOW], installed)
 
     def test_lock_observer_uses_owning_module_and_checks_for_a_configured_passcode(self):
         runtime = (OVERLAY / "cleanroom/WhitegramLocalNotifications.swift").read_text(encoding="utf-8")
@@ -179,18 +208,24 @@ class SystemCompositionTests(unittest.TestCase):
         staged = SourcePatches(self.root)
         text = staged.read(WAKEUP)
         staged.pending[WAKEUP] = text.replace("|| !tasks.isEmpty ||", "|| !changedTasks.isEmpty ||")
-        with patch("system_patches.SourcePatches", return_value=staged), patch.object(Path, "write_bytes") as writes:
-            with self.assertRaisesRegex(ValueError, "backgroundKeepAlive"):
-                apply_system_patches(self.root)
+        with (
+            patch("system_patches.SourcePatches", return_value=staged),
+            patch.object(Path, "write_bytes") as writes,
+            self.assertRaisesRegex(ValueError, "backgroundKeepAlive"),
+        ):
+            apply_system_patches(self.root)
         writes.assert_not_called()
 
     def test_duplicate_layout_anchor_is_rejected(self):
         staged = SourcePatches(self.root)
         text = staged.read(WINDOW)
         staged.pending[WINDOW] = text + "\n                self.updatedContainerLayout = childLayout\n"
-        with patch("system_patches.SourcePatches", return_value=staged), patch.object(Path, "write_bytes") as writes:
-            with self.assertRaisesRegex(ValueError, "showRAMUsage"):
-                apply_system_patches(self.root)
+        with (
+            patch("system_patches.SourcePatches", return_value=staged),
+            patch.object(Path, "write_bytes") as writes,
+            self.assertRaisesRegex(ValueError, "showRAMUsage"),
+        ):
+            apply_system_patches(self.root)
         writes.assert_not_called()
 
 

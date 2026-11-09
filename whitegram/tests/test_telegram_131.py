@@ -17,23 +17,31 @@ from port_public import (
     resolver_for_revision,
     text,
 )
-from public_resolutions_131 import REVISION, resolve_131
+from public_resolutions_131 import (
+    REVISION,
+    REVISION_1312,
+    SUPPORTED_REVISIONS,
+    resolve_131,
+)
 
 
 class Telegram131PinTests(unittest.TestCase):
     def test_active_pin_selects_reviewed_resolver(self):
         pin = json.loads((OVERLAY / "upstream.json").read_text(encoding="utf-8"))
-        self.assertEqual(pin["source_tag"], "release-13.1.1")
-        self.assertEqual(pin["source_sha"], REVISION)
-        self.assertIs(resolver_for_revision(REVISION), resolve_131)
+        self.assertEqual(pin["source_tag"], "release-13.1.2")
+        self.assertEqual(pin["source_sha"], REVISION_1312)
+        for revision in SUPPORTED_REVISIONS:
+            self.assertIs(resolver_for_revision(revision), resolve_131)
 
 
 @unittest.skipUnless(os.environ.get("WHITEGRAM_ASSEMBLED_SOURCE") and os.environ.get("WHITEGRAM_PUBLIC_SOURCE"), "Set assembled and public sources")
 class Telegram131MergeTests(unittest.TestCase):
+    revision = REVISION
+
     def merged(self, relative):
         def read(root, revision):
             return text(subprocess.check_output(["git", "-C", root, "show", f"{revision}:{relative}"]))
-        ours = read(os.environ["WHITEGRAM_ASSEMBLED_SOURCE"], REVISION)
+        ours = read(os.environ["WHITEGRAM_ASSEMBLED_SOURCE"], self.revision)
         base = read(os.environ["WHITEGRAM_PUBLIC_SOURCE"], BASE_REF)
         theirs = read(os.environ["WHITEGRAM_PUBLIC_SOURCE"], PUBLIC_REF)
         result, clean = merge(ours, base, theirs)
@@ -84,6 +92,15 @@ class Telegram131MergeTests(unittest.TestCase):
         result = self.merged("submodules/TelegramUI/Sources/ChatPinnedMessageTitlePanelNode.swift")
         self.assertIn("&& actionTitle == nil && !isSkeleton", result)
         self.assertIn("else if isReplyThread || actionTitle != nil || isSkeleton", result)
+
+
+class Telegram1312MergeTests(Telegram131MergeTests):
+    revision = REVISION_1312
+
+    def test_supplementary_accounts_keep_upstream_short_sent_message_guard(self):
+        result = self.merged("submodules/TelegramCore/Sources/Account/Account.swift")
+        self.assertIn("ignoresShortSentMessages: supplementary", result)
+        self.assertIn("ignoresShortSentMessages: true", result)
 
 
 if __name__ == "__main__":
